@@ -36,7 +36,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
     <header className="sticky top-0 z-40 bg-brand-700 text-white border-b border-brand-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <img src="/logo-wide.png" alt="Houria حورية" className="h-10 w-auto rounded-lg shrink-0" />
+          <img src="/logo-white.png" alt="Houria حورية" className="h-10 w-auto shrink-0" />
           <div className="min-w-0">
             <div className="font-extrabold text-base truncate">{merchantSettings.storeNameAr}</div>
             <div className="text-[10px] text-brand-300 font-bold">لوحة التحكم</div>

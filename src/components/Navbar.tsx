@@ -51,7 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between gap-3 h-14 md:h-20">
           {/* Logo & Store Branding */}
           <div className="flex items-center gap-2.5 md:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('store')}>
-            <img src="/logo-wide.png" alt="Houria حورية" className="h-10 md:h-14 w-auto rounded-xl shrink-0 shadow-sm ring-1 ring-brand-200" />
+            <img src="/logo-wide.png" alt="Houria حورية" className="h-11 md:h-14 w-auto shrink-0" />
             <div>
               <span className="block font-extrabold text-lg md:text-xl tracking-tight text-brand-700 truncate">
                 {language === 'ar' ? merchantSettings.storeNameAr : merchantSettings.storeNameEn}

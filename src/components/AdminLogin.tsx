@@ -34,7 +34,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ storeName, onLogin, onBa
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-brand-700 to-brand-950 px-4 py-10">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 sm:p-8 space-y-4">
         <div className="text-center pb-1">
-          <img src="/logo-wide.png" alt="Houria حورية" className="h-24 w-auto rounded-2xl mx-auto" />
+          <img src="/logo-wide.png" alt="Houria حورية" className="h-24 w-auto mx-auto" />
           <h1 className="mt-3 text-xl font-black text-stone-900">{storeName}</h1>
           <p className="text-xs text-stone-500 mt-1">تسجيل الدخول للوحة التحكم</p>
         </div>
