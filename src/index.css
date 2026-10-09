@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Cairo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  [dir="ltr"] {
+    --font-sans: 'Plus Jakarta Sans', 'Cairo', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-voucher, #printable-voucher * {
+    visibility: visible;
+  }
+  #printable-voucher {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white;
+    color: black;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f5f4;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+/* ───────────────────────── Mobile-first shell ───────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs at 16px on phones so iOS Safari doesn't zoom the page on focus */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Popups: a bottom sheet on phones, a centered dialog from 640px up */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(12 10 9 / 0.7);
+  backdrop-filter: blur(4px);
+}
+.sheet-panel {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  max-height: 94vh;
+  max-height: 94dvh;
+  box-shadow: 0 -10px 40px rgb(0 0 0 / 0.25);
+  animation: sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sheet-panel::before {
+  /* grab handle */
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 999px;
+  background: #d6d3d1;
+  z-index: 2;
+}
+.sheet-footer {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+@media (min-width: 640px) {
+  .sheet-overlay {
+    align-items: center;
+    padding: 1rem;
+  }
+  .sheet-panel {
+    border-radius: 1.5rem;
+    max-height: 92vh;
+    border: 1px solid #e7e5e4;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    animation: sheet-fade 0.2s ease-out;
+  }
+  .sheet-panel::before {
+    display: none;
+  }
+  .sheet-footer {
+    padding-bottom: 1.25rem !important;
+  }
+}
+@keyframes sheet-up {
+  from { transform: translateY(40px); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes sheet-fade {
+  from { transform: scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel { animation: none; }
+}
+
+/* Bottom tab bar on phones */
+.mobile-tabbar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.has-mobile-tabbar {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .has-mobile-tabbar { padding-bottom: 0; }
+}

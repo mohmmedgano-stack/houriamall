@@ -1,0 +1,6 @@
+{
+  "name": "حجوزاتي | منصة حجز المنتجات والدفع المسبق",
+  "description": "منصة متطورة لحجز المنتجات المسبقة بمقدم حجز مخصص، وتتبع الطلبات بالأكواد، ولوحة تحكم تاجر متكاملة مع إشعارات لحظية وإدارة المخزون.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
