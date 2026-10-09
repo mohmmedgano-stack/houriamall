@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useClickOutside } from '../utils/useDismiss';
-import { Bell, Volume2, VolumeX, ShoppingBag, ExternalLink, LogOut } from 'lucide-react';
+import { Bell, Volume2, VolumeX, ExternalLink, LogOut } from 'lucide-react';
 import { NotificationItem, MerchantSettings } from '../types';
 import { formatDate } from '../utils/storage';
 
@@ -33,15 +33,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   useClickOutside(dropdownRef, () => setOpen(false), open);
 
   return (
-    <header className="sticky top-0 z-40 bg-stone-900 text-white border-b border-stone-800">
+    <header className="sticky top-0 z-40 bg-brand-700 text-white border-b border-brand-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-amber-400 flex items-center justify-center shrink-0">
-            <ShoppingBag className="w-5 h-5 text-stone-900" />
-          </div>
+          <img src="/logo-wide.png" alt="Houria حورية" className="h-10 w-auto rounded-lg shrink-0" />
           <div className="min-w-0">
             <div className="font-extrabold text-base truncate">{merchantSettings.storeNameAr}</div>
-            <div className="text-[10px] text-amber-300 font-bold">لوحة التحكم</div>
+            <div className="text-[10px] text-brand-300 font-bold">لوحة التحكم</div>
           </div>
         </div>
 
@@ -49,13 +47,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <button
             onClick={onToggleSound}
             title={merchantSettings.soundAlertEnabled ? 'صوت التنبيهات شغال' : 'صوت التنبيهات مقفول'}
-            className={`p-2 rounded-lg border ${merchantSettings.soundAlertEnabled ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10' : 'border-stone-700 text-stone-400'}`}
+            className={`p-2 rounded-lg border ${merchantSettings.soundAlertEnabled ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10' : 'border-white/25 text-stone-400'}`}
           >
             {merchantSettings.soundAlertEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
           <div className="relative" ref={dropdownRef}>
-            <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg border border-stone-700 hover:bg-stone-800" aria-label="التنبيهات">
+            <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg border border-white/25 hover:bg-brand-800" aria-label="التنبيهات">
               <Bell className="w-4 h-4" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-red-600 text-[10px] font-bold flex items-center justify-center">
@@ -85,7 +83,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                           setOpen(false);
                           onOpenReservation(n.reservationCode);
                         }}
-                        className={`w-full text-right p-3 hover:bg-stone-50 ${!n.isRead ? 'bg-amber-50/60' : ''}`}
+                        className={`w-full text-right p-3 hover:bg-stone-50 ${!n.isRead ? 'bg-brand-50/60' : ''}`}
                       >
                         <div className="flex justify-between gap-2">
                           <span className="font-bold text-xs">{n.titleAr}</span>
@@ -101,11 +99,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             )}
           </div>
 
-          <button onClick={onViewSite} className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg border border-stone-700 hover:bg-stone-800 text-xs font-bold">
+          <button onClick={onViewSite} className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/25 hover:bg-brand-800 text-xs font-bold">
             <ExternalLink className="w-3.5 h-3.5" />
             <span>عرض الموقع</span>
           </button>
-          <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-xs font-bold text-amber-300">
+          <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-900 hover:bg-brand-950 text-xs font-bold text-brand-200">
             <LogOut className="w-3.5 h-3.5" />
             <span>خروج</span>
           </button>

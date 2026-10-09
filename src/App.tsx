@@ -308,7 +308,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
             <div
               role="status"
-              className={`p-3 rounded-xl text-xs font-bold border ${adminError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-900'}`}
+              className={`p-3 rounded-xl text-xs font-bold border ${adminError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-brand-50 border-brand-200 text-brand-900'}`}
             >
               {adminError || savingMessage}
             </div>
@@ -320,7 +320,7 @@ export default function App() {
             {adminError ? (
               <div className="space-y-3">
                 <p className="text-sm font-bold text-red-700">{adminError}</p>
-                <button onClick={() => loadAdmin()} className="px-4 py-2 rounded-xl bg-stone-900 text-amber-300 text-xs font-bold">حاول تاني</button>
+                <button onClick={() => loadAdmin()} className="px-4 py-2 rounded-xl bg-brand-700 text-white text-xs font-bold">حاول تاني</button>
               </div>
             ) : (
               <p className="text-sm text-stone-500 animate-pulse">جاري تحميل البيانات...</p>
@@ -348,7 +348,7 @@ export default function App() {
 
   // ───────────────────────── PUBLIC VISITOR SITE ─────────────────────────
   return (
-    <div className="has-mobile-tabbar min-h-screen flex flex-col bg-stone-50 text-stone-900 selection:bg-amber-400 selection:text-stone-900">
+    <div className="has-mobile-tabbar min-h-screen flex flex-col bg-stone-50 text-stone-900 selection:bg-brand-400 selection:text-stone-900">
       <Navbar
         currentView={currentView}
         onNavigate={handleNavigate}
@@ -394,7 +394,7 @@ export default function App() {
             ) : loadError ? (
               <div className="text-center py-16 bg-white rounded-3xl border border-red-200 space-y-3">
                 <p className="text-red-700 text-sm font-bold">{loadError}</p>
-                <button onClick={() => { setStoreLoading(true); loadStore(); }} className="px-4 py-2 rounded-xl bg-stone-900 text-amber-300 text-xs font-bold">
+                <button onClick={() => { setStoreLoading(true); loadStore(); }} className="px-4 py-2 rounded-xl bg-brand-700 text-white text-xs font-bold">
                   {language === 'ar' ? 'حاول تاني' : 'Try again'}
                 </button>
               </div>

@@ -37,16 +37,16 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const ArrowIcon = language === 'ar' ? ArrowLeft : ArrowRight;
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-900 to-stone-950 text-white pt-10 pb-16 px-4 sm:px-6 lg:px-8 border-b border-stone-800">
+    <div className="relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-900 to-stone-950 text-white pt-10 pb-16 px-4 sm:px-6 lg:px-8 border-b border-brand-800">
       {/* Decorative background subtle glows */}
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-6xl mx-auto relative z-10">
         
         {/* Top Badges */}
         <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/10 text-amber-300 border border-amber-400/20">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand-400/10 text-brand-300 border border-brand-400/20">
             <Sparkles className="w-3.5 h-3.5" />
             <span>{language === 'ar' ? 'نظام الحجز المسبق المعتمد' : 'Verified Pre-Order System'}</span>
           </div>
@@ -58,7 +58,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             onClick={onOpenTrackView}
             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-stone-800 text-stone-200 border border-stone-700 hover:bg-stone-700 transition-colors"
           >
-            <QrCode className="w-3.5 h-3.5 text-amber-400" />
+            <QrCode className="w-3.5 h-3.5 text-brand-400" />
             <span>{t.navTrack}</span>
             <ArrowIcon className="w-3 h-3" />
           </button>
@@ -77,7 +77,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         {/* Feature Highlights Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto mb-10">
           <div className="flex items-center gap-3 p-3.5 rounded-xl bg-stone-800/60 border border-stone-700/60 backdrop-blur-sm">
-            <div className="w-10 h-10 rounded-lg bg-amber-400/10 text-amber-400 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-brand-400/10 text-brand-400 flex items-center justify-center shrink-0">
               <CreditCard className="w-5 h-5" />
             </div>
             <div>
@@ -124,7 +124,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={t.searchPlaceholder}
-              className={`w-full py-3.5 bg-stone-800/90 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm shadow-inner transition-all ${
+              className={`w-full py-3.5 bg-stone-800/90 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-brand-400 text-sm shadow-inner transition-all ${
                 language === 'ar' ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'
               }`}
             />
@@ -150,7 +150,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                   onClick={() => onCategoryChange(cat.id)}
                   className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap font-medium transition-all ${
                     isActive
-                      ? 'bg-amber-400 text-stone-950 font-bold shadow'
+                      ? 'bg-brand-400 text-stone-950 font-bold shadow'
                       : 'bg-stone-800/80 text-stone-300 hover:bg-stone-700/80 hover:text-white'
                   }`}
                 >

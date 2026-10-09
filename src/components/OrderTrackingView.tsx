@@ -175,8 +175,8 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
           description: language === 'ar' 
             ? 'تم تسجيل حجزك واستلام إثبات تحويل المقدم، والمتجر بيراجع التحويل لتأكيد الحجز.' 
             : 'Booking registered with deposit proof. The store is verifying your transfer.',
-          badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
-          dotClass: 'bg-amber-500',
+          badgeClass: 'bg-brand-100 text-brand-900 border-brand-300',
+          dotClass: 'bg-brand-500',
         };
       case 'confirmed':
         return {
@@ -211,8 +211,8 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
           description: language === 'ar'
             ? 'تم استلام المنتج من الفرع وسداد الباقي. نشكرك لثقتك بنا!'
             : 'Picked up at the branch and remaining amount paid. Thank you!',
-          badgeClass: 'bg-stone-900 text-amber-300 border-stone-800',
-          dotClass: 'bg-amber-400',
+          badgeClass: 'bg-brand-700 text-brand-300 border-brand-800',
+          dotClass: 'bg-brand-400',
         };
       case 'cancelled':
         return {
@@ -280,7 +280,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
             <Layers className="w-3.5 h-3.5" />
             <span>{t.tabMyBookings}</span>
             {savedReservationsList.length > 0 && (
-              <span className="bg-amber-400 text-stone-950 font-black text-[10px] px-1.5 py-0.2 rounded-full">
+              <span className="bg-brand-400 text-stone-950 font-black text-[10px] px-1.5 py-0.2 rounded-full">
                 {savedReservationsList.length}
               </span>
             )}
@@ -308,7 +308,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
               <button
                 type="submit"
                 disabled={isSearching}
-                className="py-3 px-4 sm:px-5 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs sm:text-sm rounded-xl shadow transition-colors shrink-0 disabled:opacity-60"
+                className="py-3 px-4 sm:px-5 bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow transition-colors shrink-0 disabled:opacity-60"
               >
                 {isSearching ? (language === 'ar' ? 'بدوّر...' : 'Searching...') : t.trackButton}
               </button>
@@ -324,7 +324,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                     key={r.code}
                     type="button"
                     onClick={() => setActiveReservation(r)}
-                    className={`font-mono font-bold px-2 py-0.5 rounded border transition-colors ${activeReservation?.code === r.code ? 'bg-stone-900 text-amber-300 border-stone-900' : 'text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-300/80'}`}
+                    className={`font-mono font-bold px-2 py-0.5 rounded border transition-colors ${activeReservation?.code === r.code ? 'bg-brand-700 text-brand-300 border-stone-900' : 'text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-300/80'}`}
                   >
                     {r.code}
                   </button>
@@ -357,7 +357,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                         onClick={() => handleSelectSavedCode(r.code)}
                         className={`p-4 rounded-2xl border text-xs cursor-pointer transition-all ${
                           isSelected 
-                            ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-200' 
+                            ? 'bg-brand-50/60 border-brand-400 ring-2 ring-brand-200' 
                             : 'bg-stone-50/70 border-stone-200 hover:bg-stone-100/70'
                         }`}
                       >
@@ -493,7 +493,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                 <div className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm ${
                   activeReservation.paymentStatus !== 'pending_verification'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    : 'bg-amber-100 text-amber-900 border border-amber-200'
+                    : 'bg-brand-100 text-brand-900 border border-brand-200'
                 }`}>
                   <ShieldCheck className="w-4 h-4" />
                   <span>
@@ -561,7 +561,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                       key={stage.id}
                       className={`p-3.5 rounded-2xl border transition-all ${
                         isCurrent
-                          ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-200 shadow-sm'
+                          ? 'bg-brand-50/80 border-brand-300 ring-2 ring-brand-200 shadow-sm'
                           : isPassed
                           ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
                           : 'bg-stone-50/50 border-stone-200 text-stone-400 opacity-60'
@@ -636,7 +636,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                   ))}
 
                   {activeReservation.merchantNotes && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                    <div className="mt-2 p-2.5 rounded-xl bg-brand-50 border border-brand-200 text-[11px] text-brand-900">
                       <strong>ملاحظة من المتجر:</strong> {activeReservation.merchantNotes}
                     </div>
                   )}
@@ -653,7 +653,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
               </div>
               <button
                 onClick={handleCopyDirectLink}
-                className="px-3.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-colors shrink-0"
+                className="px-3.5 py-1.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shrink-0"
               >
                 {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{linkCopied ? t.linkCopied : t.copyDirectLink}</span>
@@ -683,7 +683,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
                 <button
                   onClick={onNavigateToStore}
-                  className="px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-xs font-bold transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold transition-colors"
                 >
                   {t.navBrowse}
                 </button>

@@ -19,7 +19,7 @@ export const BranchesCard: React.FC<BranchesCardProps> = ({ merchantSettings }) 
       <ul className="space-y-2.5">
         {branches.map((b, i) => (
           <li key={i} className="flex items-start gap-2.5">
-            <span className="mt-0.5 w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <span className="mt-0.5 w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
               <MapPin className="w-4 h-4" />
             </span>
             <div className="min-w-0">

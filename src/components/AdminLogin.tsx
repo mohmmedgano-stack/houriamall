@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, ShoppingBag, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 interface AdminLoginProps {
   storeName: string;
@@ -31,12 +31,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ storeName, onLogin, onBa
   };
 
   return (
-    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-900 to-stone-950 px-4 py-10">
+    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-brand-700 to-brand-950 px-4 py-10">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 sm:p-8 space-y-4">
         <div className="text-center pb-1">
-          <div className="w-14 h-14 rounded-2xl bg-stone-900 flex items-center justify-center mx-auto">
-            <ShoppingBag className="w-7 h-7 text-amber-400" />
-          </div>
+          <img src="/logo-wide.png" alt="Houria حورية" className="h-24 w-auto rounded-2xl mx-auto" />
           <h1 className="mt-3 text-xl font-black text-stone-900">{storeName}</h1>
           <p className="text-xs text-stone-500 mt-1">تسجيل الدخول للوحة التحكم</p>
         </div>
@@ -91,7 +89,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ storeName, onLogin, onBa
           </div>
         </div>
 
-        <button type="submit" disabled={busy} className="w-full py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-extrabold text-sm disabled:opacity-60">
+        <button type="submit" disabled={busy} className="w-full py-3 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-extrabold text-sm disabled:opacity-60">
           {busy ? 'جاري الدخول...' : 'تسجيل الدخول'}
         </button>
 

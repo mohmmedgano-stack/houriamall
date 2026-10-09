@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* حورية مول brand — burgundy #800020 (brand-700). Blush tints come from the logo. */
+@theme {
+  --color-brand-50: #fdf3f5;
+  --color-brand-100: #fbe4e8;
+  --color-brand-200: #f6cad2;
+  --color-brand-300: #eea4b2;
+  --color-brand-400: #e2768c;
+  --color-brand-500: #c23f5e;
+  --color-brand-600: #a0103a;
+  --color-brand-700: #800020;
+  --color-brand-800: #66001a;
+  --color-brand-900: #4d0014;
+  --color-brand-950: #33000d;
+}
+
 @layer base {
   :root {
     --font-sans: 'Cairo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;

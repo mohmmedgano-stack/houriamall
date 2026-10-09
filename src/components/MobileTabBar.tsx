@@ -24,13 +24,13 @@ export const MobileTabBar: React.FC<MobileTabBarProps> = ({ currentView, onNavig
     <nav className="mobile-tabbar md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-stone-200 shadow-[0_-4px_20px_rgb(0_0_0/0.06)] print:hidden">
       <div className="flex items-stretch max-w-md mx-auto">
         <button onClick={() => onNavigate('store')} className={item(currentView === 'store')} aria-current={currentView === 'store' ? 'page' : undefined}>
-          <span className={`flex items-center justify-center w-12 h-7 rounded-full ${currentView === 'store' ? 'bg-amber-300/60' : ''}`}>
+          <span className={`flex items-center justify-center w-12 h-7 rounded-full ${currentView === 'store' ? 'bg-brand-300/60' : ''}`}>
             <Store className="w-5 h-5" />
           </span>
           <span>{ar ? 'المنتجات' : 'Products'}</span>
         </button>
         <button onClick={() => onNavigate('track')} className={item(currentView === 'track')} aria-current={currentView === 'track' ? 'page' : undefined}>
-          <span className={`flex items-center justify-center w-12 h-7 rounded-full ${currentView === 'track' ? 'bg-amber-300/60' : ''}`}>
+          <span className={`flex items-center justify-center w-12 h-7 rounded-full ${currentView === 'track' ? 'bg-brand-300/60' : ''}`}>
             <Search className="w-5 h-5" />
           </span>
           <span>{ar ? 'تتبع حجزي' : 'Track'}</span>

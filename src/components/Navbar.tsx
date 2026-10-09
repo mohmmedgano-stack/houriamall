@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Search, Globe, Store } from 'lucide-react';
+import { Search, Globe, Store } from 'lucide-react';
 import { Language, MerchantSettings } from '../types';
 import { translations } from '../translations';
 
@@ -29,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       onClick={() => onNavigate(view)}
       className={
         mobile
-          ? `flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg ${currentView === view ? 'bg-stone-900 text-white' : 'text-stone-600'}`
+          ? `flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg ${currentView === view ? 'bg-brand-700 text-white' : 'text-stone-600'}`
           : `flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
               currentView === view ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
             }`
@@ -43,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 print:hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       {merchantSettings.announcementEnabled && announcement && (
-        <div className="bg-amber-400 text-stone-950 px-4 py-2 text-center text-xs sm:text-sm font-extrabold leading-snug">
+        <div className="bg-brand-700 text-white px-4 py-2 text-center text-xs sm:text-sm font-extrabold leading-snug">
           {announcement}
         </div>
       )}
@@ -51,11 +51,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between gap-3 h-14 md:h-20">
           {/* Logo & Store Branding */}
           <div className="flex items-center gap-2.5 md:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('store')}>
-            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-stone-900 text-amber-400 flex items-center justify-center shadow-sm border border-stone-800 shrink-0">
-              <ShoppingBag className="w-5 h-5 md:w-6 md:h-6 text-amber-400" />
-            </div>
+            <img src="/logo-wide.png" alt="Houria حورية" className="h-10 md:h-14 w-auto rounded-xl shrink-0 shadow-sm ring-1 ring-brand-200" />
             <div>
-              <span className="block font-extrabold text-lg md:text-xl tracking-tight text-stone-900 truncate">
+              <span className="block font-extrabold text-lg md:text-xl tracking-tight text-brand-700 truncate">
                 {language === 'ar' ? merchantSettings.storeNameAr : merchantSettings.storeNameEn}
               </span>
               <p className="text-xs text-stone-500 hidden sm:block truncate max-w-xs">{t.brandBadge}</p>

@@ -59,7 +59,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between gap-3 pt-6 pb-3 px-4 sm:p-6 border-b border-stone-100 bg-stone-50/60 sticky top-0 z-10">
           <div className="min-w-0">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+            <span className="text-xs font-bold text-brand-700 uppercase tracking-wider">
               {language === 'ar' ? product.category : product.categoryEn}
             </span>
             <h2 className="text-lg sm:text-2xl font-black text-stone-900 line-clamp-2 sm:line-clamp-1 leading-snug">
@@ -95,7 +95,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       key={idx}
                       onClick={() => setSelectedImg(idx)}
                       className={`w-20 h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${
-                        selectedImg === idx ? 'border-amber-500 ring-2 ring-amber-300' : 'border-stone-200 opacity-70 hover:opacity-100'
+                        selectedImg === idx ? 'border-brand-500 ring-2 ring-brand-300' : 'border-stone-200 opacity-70 hover:opacity-100'
                       }`}
                     >
                       <img src={img} alt="Thumbnail" className="w-full h-full object-cover" />
@@ -111,7 +111,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <span>{language === 'ar' ? 'المقدم جزء من السعر ومخصوم منه' : 'Deposit is part of the price'}</span>
                 </div>
                 <div className="flex items-center gap-2 font-medium">
-                  <Truck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <Truck className="w-4 h-4 text-brand-600 shrink-0" />
                   <span>{language === 'ar' ? 'الاستلام من الفرع بالكوبون' : 'Pick up at the branch with your coupon'}</span>
                 </div>
                 <div className="flex items-center gap-2 font-medium">
@@ -129,14 +129,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {bookingWindow.state !== 'none' && <CountdownTimer product={product} language={language} size="lg" />}
 
               {/* Financial Box */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50/80 to-amber-100/50 border border-amber-200 space-y-3">
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-brand-50/80 to-brand-100/50 border border-brand-200 space-y-3">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs font-bold text-amber-900">{t.totalPrice}</span>
+                  <span className="text-xs font-bold text-brand-900">{t.totalPrice}</span>
                   <span className="text-2xl font-black text-stone-900">
                     {formatCurrency(product.price, currency, language)}
                   </span>
                 </div>
-                <div className="h-px bg-amber-200/80" />
+                <div className="h-px bg-brand-200/80" />
                 <div className="flex items-center justify-between text-xs text-stone-700">
                   <span>{language === 'ar' ? 'الكمية المسموحة:' : 'Allowed quantity:'}</span>
                   <span className="font-bold text-stone-900">{t.oneItemOnly}</span>
@@ -151,7 +151,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-xs text-stone-700">
                   <span>{t.estimatedDelivery}:</span>
-                  <span className="font-bold text-amber-900">{language === 'ar' ? product.estimatedArrivalAr : product.estimatedArrivalEn}</span>
+                  <span className="font-bold text-brand-900">{language === 'ar' ? product.estimatedArrivalAr : product.estimatedArrivalEn}</span>
                 </div>
               </div>
 
@@ -229,7 +229,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               className={`flex-1 sm:flex-none justify-center px-4 sm:px-6 py-3 sm:py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md ${
                 isClosed
                   ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                  : 'bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200'
+                  : 'bg-brand-700 hover:bg-brand-800 text-brand-300 hover:text-brand-200'
               }`}
             >
               <span>{bookingWindow.state === 'ended' ? (language === 'ar' ? 'انتهى وقت الحجز' : 'Booking ended') : bookingWindow.state === 'not_started' ? (language === 'ar' ? 'الحجز لسه مبدأش' : 'Not open yet') : isClosed ? t.statusClosed : t.reserveNow}</span>

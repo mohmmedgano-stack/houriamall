@@ -19,7 +19,7 @@ export const Footer: React.FC<FooterProps> = ({
   const adminTaps = useRef<number[]>([]);
 
   return (
-    <footer className="print:hidden bg-stone-900 text-stone-300 border-t border-stone-800 mt-10 sm:mt-20">
+    <footer className="print:hidden bg-brand-700 text-stone-300 border-t border-brand-800 mt-10 sm:mt-20">
       {/* Main Footer Links */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-10">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right rtl:md:text-right ltr:md:text-left">

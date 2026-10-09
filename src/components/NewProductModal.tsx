@@ -213,7 +213,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
           </div>
 
           {/* Pricing, deposit & quota (each booking = one piece) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200">
             <div>
               <label className="block text-xs font-bold text-stone-900 mb-1">
                 {t.priceLabel} ({currency}) *
@@ -223,7 +223,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 min="1"
                 value={price}
                 onChange={(e) => setPrice(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-bold text-stone-900 text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white font-bold text-stone-900 text-sm"
                 required
               />
             </div>
@@ -373,7 +373,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               placeholder="https://images.unsplash.com/..."
               className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs font-mono"
             />
-            <label className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-900 text-amber-300 text-xs font-bold cursor-pointer hover:bg-stone-800">
+            <label className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-700 text-white text-xs font-bold cursor-pointer hover:bg-brand-800">
               <span>📷 ارفع صورة من جهازك</span>
               <input
                 type="file"
@@ -412,7 +412,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                   key={i}
                   onClick={() => setImageUrl(img)}
                   className={`w-10 h-10 rounded-lg overflow-hidden border shrink-0 ${
-                    imageUrl === img ? 'ring-2 ring-amber-500 border-amber-500' : 'border-stone-200'
+                    imageUrl === img ? 'ring-2 ring-brand-500 border-brand-500' : 'border-stone-200'
                   }`}
                 >
                   <img src={img} alt="Preset" className="w-full h-full object-cover" />
@@ -458,7 +458,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-6 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-xs font-bold shadow"
+              className="px-6 py-2 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold shadow"
             >
               {t.saveProduct}
             </button>

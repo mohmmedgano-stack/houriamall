@@ -38,8 +38,8 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({ product, languag
     ? 'bg-indigo-50 border-indigo-200 text-indigo-900'
     : urgent
       ? 'bg-red-50 border-red-200 text-red-900'
-      : 'bg-amber-50 border-amber-200 text-amber-950';
-  const box = upcoming ? 'bg-indigo-600' : urgent ? 'bg-red-600' : 'bg-stone-900';
+      : 'bg-brand-50 border-brand-200 text-brand-950';
+  const box = upcoming ? 'bg-indigo-600' : urgent ? 'bg-red-600' : 'bg-brand-700';
   const Icon = upcoming ? Hourglass : Timer;
   const big = size === 'lg';
 

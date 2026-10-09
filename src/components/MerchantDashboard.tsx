@@ -44,6 +44,7 @@ import { formatCurrency, formatDate, exportReservationsToCSV, whatsappLink } fro
 import { NewProductModal } from './NewProductModal';
 import { getBookingWindow, splitDuration, useNow } from '../utils/bookingWindow';
 import { useEscapeKey } from '../utils/useDismiss';
+import { ProofViewer } from './ProofViewer';
 
 interface MerchantDashboardProps {
   products: Product[];
@@ -94,7 +95,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   // Settings form local state
   const [settingsForm, setSettingsForm] = useState<MerchantSettings>(merchantSettings);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
-  useEscapeKey(() => setInspectReservation(null), Boolean(inspectReservation));
+  // Full-screen transfer screenshot viewer
+  const [viewProof, setViewProof] = useState<Reservation | null>(null);
+  useEscapeKey(() => setInspectReservation(null), Boolean(inspectReservation) && !viewProof);
   // Login credentials form (separate from the store settings form)
   const [credUsername, setCredUsername] = useState(merchantSettings.adminUsername);
   const [credCurrent, setCredCurrent] = useState('');
@@ -110,7 +113,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     const left = d.days > 0 ? `${d.days} يوم ${d.hours} ساعة` : `${d.hours} ساعة ${d.minutes} دقيقة`;
     if (w.state === 'ended') return { text: 'الوقت خلص — الحجز مقفول', cls: 'bg-stone-200 text-stone-700' };
     if (w.state === 'not_started') return { text: `يبدأ بعد ${left}`, cls: 'bg-indigo-100 text-indigo-800' };
-    return { text: `ينتهي بعد ${left}`, cls: d.days === 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-900' };
+    return { text: `ينتهي بعد ${left}`, cls: d.days === 0 ? 'bg-red-100 text-red-800' : 'bg-brand-100 text-brand-900' };
   };
 
   // Inline Quick price edit states in inventory tab
@@ -343,7 +346,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-stone-900 text-amber-300">
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-brand-700 text-white">
               Admin Command Center
             </span>
             <span className="text-xs text-stone-500 font-medium">
@@ -445,12 +448,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-stone-200 shadow-sm">
           <div className="flex items-center justify-between text-xs text-stone-500 font-semibold mb-2">
             <span>{t.statPendingBookings}</span>
-            <Clock className="w-4 h-4 text-amber-500" />
+            <Clock className="w-4 h-4 text-brand-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-amber-600">
+          <div className="text-2xl sm:text-3xl font-black text-brand-600">
             {formatCurrency(pendingDepositsValue, currency, language)}
           </div>
-          <div className="mt-1 text-[11px] text-amber-800 font-medium">
+          <div className="mt-1 text-[11px] text-brand-800 font-medium">
             {pendingCount} حجز — راجع صورة التحويل أو الواتساب
           </div>
         </div>
@@ -546,7 +549,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                       <tr 
                         key={res.id} 
                         className={`hover:bg-stone-50/80 transition-colors ${
-                          inspectReservation?.id === res.id ? 'bg-amber-50/40' : ''
+                          inspectReservation?.id === res.id ? 'bg-brand-50/40' : ''
                         }`}
                       >
                         {/* Code & Date */}
@@ -581,10 +584,21 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                           <div className="text-[10px] text-stone-500">
                             {res.paymentMethod === 'instapay' ? 'إنستاباي' : 'فودافون كاش'}
                             {' · '}
-                            {res.paymentProofUrl ? '📎 صورة' : res.proofSentOnWhatsApp ? '💬 واتساب' : res.paymentReferenceNumber ? `#${res.paymentReferenceNumber}` : '—'}
+                            {res.paymentProofUrl ? '' : res.proofSentOnWhatsApp ? '💬 واتساب' : res.paymentReferenceNumber ? `#${res.paymentReferenceNumber}` : '—'}
                           </div>
+                          {res.paymentProofUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setViewProof(res)}
+                              title="عرض صورة التحويل"
+                              className="mt-1 flex items-center gap-1.5 p-0.5 pe-2 rounded-lg border border-stone-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+                            >
+                              <img src={res.paymentProofUrl} alt="" loading="lazy" className="w-8 h-8 rounded-md object-cover bg-stone-100" />
+                              <span className="text-[10px] font-bold text-stone-700">شوف التحويل</span>
+                            </button>
+                          )}
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5 ${
-                            res.paymentStatus === 'pending_verification' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            res.paymentStatus === 'pending_verification' ? 'bg-brand-100 text-brand-800' : 'bg-emerald-100 text-emerald-800'
                           }`}>
                             {res.paymentStatus === 'pending_verification' ? 'قيد المراجعة ⏳' : res.paymentStatus === 'fully_paid' ? 'مدفوع بالكامل ✓' : 'معتمد ✓'}
                           </span>
@@ -606,9 +620,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                             res.reservationStatus === 'confirmed' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
                             res.reservationStatus === 'in_preparation' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
                             res.reservationStatus === 'ready_for_delivery' ? 'bg-indigo-50 text-indigo-800 border border-indigo-200' :
-                            res.reservationStatus === 'completed' ? 'bg-stone-900 text-white' :
+                            res.reservationStatus === 'completed' ? 'bg-brand-700 text-white' :
                             res.reservationStatus === 'cancelled' ? 'bg-red-50 text-red-700' :
-                            'bg-amber-50 text-amber-800 border border-amber-200'
+                            'bg-brand-50 text-brand-800 border border-brand-200'
                           }`}>
                             {res.reservationStatus === 'confirmed' ? t.filterConfirmed :
                              res.reservationStatus === 'in_preparation' ? t.filterPrep :
@@ -721,7 +735,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
                     {inspectReservation.paymentStatus === 'pending_verification' && inspectReservation.reservationStatus !== 'cancelled' && (
                       <div className="pt-2 border-t border-stone-200 flex items-center justify-between gap-2">
-                        <span className="text-amber-800 font-bold">
+                        <span className="text-brand-800 font-bold">
                           مقدم قيد المراجعة: {formatCurrency(inspectReservation.depositAmount, currency, language)} — اتأكد إن التحويل وصل.
                         </span>
                         <button
@@ -748,8 +762,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                       )}
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-1.5">
-                      <h4 className="font-bold text-stone-900 border-b border-amber-200 pb-1 mb-2">البيان المالي</h4>
+                    <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200 space-y-1.5">
+                      <h4 className="font-bold text-stone-900 border-b border-brand-200 pb-1 mb-2">البيان المالي</h4>
                       <div className="flex justify-between">
                         <span>المنتج:</span>
                         <span className="font-bold">{inspectReservation.productNameAr}</span>
@@ -771,7 +785,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                         <span>{formatCurrency(inspectReservation.remainingAmount, currency, language)}</span>
                       </div>
                       {inspectReservation.paymentReferenceNumber && (
-                        <div className="pt-1 text-[11px] text-stone-600 border-t border-amber-200">
+                        <div className="pt-1 text-[11px] text-stone-600 border-t border-brand-200">
                           رقم العملية: <strong className="font-mono">{inspectReservation.paymentReferenceNumber}</strong>
                         </div>
                       )}
@@ -782,9 +796,23 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200">
                     <h4 className="font-bold text-stone-900 mb-2">{t.proofImage}</h4>
                     {inspectReservation.paymentProofUrl ? (
-                      <a href={inspectReservation.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-stone-200 max-h-64 bg-stone-900 flex items-center justify-center">
-                        <img src={inspectReservation.paymentProofUrl} alt="Transfer proof" className="max-h-64 object-contain" />
-                      </a>
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setViewProof(inspectReservation)}
+                          className="w-full rounded-xl overflow-hidden border border-stone-200 max-h-64 bg-brand-700 flex items-center justify-center cursor-zoom-in"
+                          title="عرض بالحجم الكامل"
+                        >
+                          <img src={inspectReservation.paymentProofUrl} alt="Transfer proof" className="max-h-64 object-contain" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setViewProof(inspectReservation)}
+                          className="w-full py-2 rounded-xl bg-brand-700 text-white text-xs font-bold hover:bg-brand-800"
+                        >
+                          🔍 عرض صورة التحويل بالحجم الكامل
+                        </button>
+                      </div>
                     ) : (
                       <div className="p-4 text-center text-stone-500 bg-white rounded-xl border border-stone-200 space-y-2">
                         <div>
@@ -817,7 +845,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     />
                     <button
                       onClick={() => handleSaveMerchantNote(inspectReservation.id)}
-                      className="px-4 py-1.5 rounded-xl bg-stone-900 text-white font-bold text-xs hover:bg-stone-800 flex items-center gap-1.5"
+                      className="px-4 py-1.5 rounded-xl bg-brand-700 text-white font-bold text-xs hover:bg-brand-800 flex items-center gap-1.5"
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>{t.saveNotes}</span>
@@ -877,7 +905,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 setProductToEdit(null);
                 setIsProductModalOpen(true);
               }}
-              className="py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 shadow"
+              className="py-2.5 px-4 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow"
             >
               <Plus className="w-4 h-4" />
               <span>{t.addProductBtn}</span>
@@ -1100,7 +1128,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </div>
                     <div className="w-full h-3 bg-stone-200 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-amber-500"
+                        className="h-full bg-brand-500"
                         style={{ 
                           width: `${totalExpectedRevenue > 0 ? (remainingAtBranch / totalExpectedRevenue) * 100 : 0}%` 
                         }}
@@ -1120,7 +1148,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-3 rounded-xl bg-white border border-stone-200">
                     <span className="text-stone-500 block">المقدم قيد المراجعة</span>
-                    <strong className="text-lg text-amber-600">
+                    <strong className="text-lg text-brand-600">
                       {reservations.filter(r => r.reservationStatus === 'pending').length}
                     </strong>
                   </div>
@@ -1193,7 +1221,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
           <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
             {/* Announcement bar */}
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3">
+            <div className="p-4 rounded-2xl bg-brand-50 border border-brand-300 space-y-3">
               <label className="flex items-center justify-between gap-3 cursor-pointer">
                 <div>
                   <span className="block font-bold text-stone-900 text-sm">📢 شريط الإعلان فوق الموقع</span>
@@ -1214,7 +1242,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   value={settingsForm.announcementAr}
                   onChange={(e) => setSettingsForm({ ...settingsForm, announcementAr: e.target.value })}
                   placeholder="مثال: خصم ١٠٪ على كل الحجوزات لحد يوم الجمعة 🔥"
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white text-xs"
                 />
               </div>
               <div>
@@ -1225,13 +1253,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   value={settingsForm.announcementEn}
                   onChange={(e) => setSettingsForm({ ...settingsForm, announcementEn: e.target.value })}
                   placeholder="لو فاضي هيظهر النص العربي"
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs dir-ltr text-left"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white text-xs dir-ltr text-left"
                 />
               </div>
               {settingsForm.announcementEnabled && settingsForm.announcementAr.trim() && (
                 <div>
                   <span className="block text-[11px] text-stone-500 mb-1">معاينة:</span>
-                  <div className="bg-amber-400 text-stone-950 px-4 py-2 rounded-lg text-center text-xs sm:text-sm font-extrabold">
+                  <div className="bg-brand-400 text-stone-950 px-4 py-2 rounded-lg text-center text-xs sm:text-sm font-extrabold">
                     {settingsForm.announcementAr}
                   </div>
                 </div>
@@ -1261,8 +1289,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             </div>
 
             {/* Deposit receiving numbers */}
-            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
-              <h3 className="font-bold text-amber-950 text-sm">أرقام استقبال المقدم (مهم جداً)</h3>
+            <div className="p-4 rounded-2xl bg-brand-50/70 border border-brand-200 space-y-3">
+              <h3 className="font-bold text-brand-950 text-sm">أرقام استقبال المقدم (مهم جداً)</h3>
               <div>
                 <label className="block font-bold text-stone-800 mb-1">
                   {t.vfNumberLabel} * <span className="font-normal text-stone-500">(رقم في كل سطر)</span>
@@ -1278,7 +1306,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     });
                   }}
                   placeholder={'010xxxxxxxx\n010xxxxxxxx'}
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
                   required
                 />
               </div>
@@ -1289,7 +1317,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   value={settingsForm.instapayAddress}
                   onChange={(e) => setSettingsForm({ ...settingsForm, instapayAddress: e.target.value })}
                   placeholder="01xxxxxxxxx أو name@instapay"
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
                   required
                 />
               </div>
@@ -1300,7 +1328,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   value={settingsForm.whatsappNumber}
                   onChange={(e) => setSettingsForm({ ...settingsForm, whatsappNumber: e.target.value })}
                   placeholder="01xxxxxxxxx"
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-300 bg-white font-mono text-sm font-bold dir-ltr text-left"
                   required
                 />
                 <span className="text-[10px] text-stone-500">الرقم ده بيستقبل صور التحويل، وعليه زرار الواتساب اللي في كل الصفحات.</span>
@@ -1401,7 +1429,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             <div className="pt-4 border-t border-stone-200 flex justify-end">
               <button
                 type="submit"
-                className="py-2.5 px-6 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center gap-2 shadow"
+                className="py-2.5 px-6 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs flex items-center gap-2 shadow"
               >
                 <Save className="w-4 h-4" />
                 <span>{t.saveSettingsBtn}</span>
@@ -1451,7 +1479,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               </div>
             </div>
             <div className="flex justify-end">
-              <button type="submit" disabled={credSaving} className="py-2.5 px-5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs disabled:opacity-60">
+              <button type="submit" disabled={credSaving} className="py-2.5 px-5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs disabled:opacity-60">
                 {credSaving ? 'جاري الحفظ...' : 'حفظ بيانات الدخول'}
               </button>
             </div>
@@ -1472,6 +1500,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         currency={currency}
       />
 
+      <ProofViewer
+        url={viewProof?.paymentProofUrl || null}
+        title={viewProof ? `صورة التحويل — ${viewProof.code}` : undefined}
+        subtitle={viewProof ? `${viewProof.customerName} · ${formatCurrency(viewProof.depositAmount, currency, language)} · ${viewProof.paymentMethod === 'instapay' ? 'إنستاباي' : 'فودافون كاش'}` : undefined}
+        onClose={() => setViewProof(null)}
+      />
     </div>
   );
 };

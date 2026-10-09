@@ -23,7 +23,7 @@ export const TrackBox: React.FC<TrackBoxProps> = ({ language, onTrack }) => {
   };
 
   return (
-    <section className="bg-stone-900 border-b border-stone-800 px-4 py-4 sm:py-8">
+    <section className="bg-brand-700 border-b border-brand-800 px-4 py-4 sm:py-8">
       <form onSubmit={submit} className="max-w-xl mx-auto">
         <label htmlFor="track-input" className="block text-sm sm:text-base font-extrabold text-white mb-2.5 text-center">
           {ar ? 'تتبع حجزك' : 'Track your booking'}
@@ -37,10 +37,10 @@ export const TrackBox: React.FC<TrackBoxProps> = ({ language, onTrack }) => {
               value={value}
               onChange={(e) => { setValue(e.target.value); setError(''); }}
               placeholder={ar ? 'كود الحجز أو رقم الموبايل' : 'Booking code (RSV-123456) or mobile'}
-              className={`w-full py-3 bg-stone-800 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm ${ar ? 'pr-10 pl-3' : 'pl-10 pr-3'}`}
+              className={`w-full py-3 bg-stone-800 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-brand-400 text-sm ${ar ? 'pr-10 pl-3' : 'pl-10 pr-3'}`}
             />
           </div>
-          <button type="submit" className="px-4 sm:px-5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-sm shrink-0">
+          <button type="submit" className="px-4 sm:px-5 rounded-xl bg-brand-400 hover:bg-brand-300 text-stone-950 font-extrabold text-sm shrink-0">
             {ar ? 'تتبع' : 'Track'}
           </button>
         </div>

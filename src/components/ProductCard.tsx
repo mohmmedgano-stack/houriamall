@@ -45,7 +45,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const ArrowIcon = language === 'ar' ? ArrowLeft : ArrowRight;
 
   return (
-    <div className="group bg-white rounded-2xl border border-stone-200/90 hover:border-amber-400/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden">
+    <div className="group bg-white rounded-2xl border border-stone-200/90 hover:border-brand-400/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden">
       
       {/* Product Image & Badges */}
       <div className="relative aspect-[16/10] sm:aspect-[4/3] w-full max-w-full overflow-hidden bg-stone-100">
@@ -59,7 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Status Tag */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
           {isClosed ? (
-            <span className="px-2.5 py-1 text-xs font-bold bg-stone-900/90 backdrop-blur-sm text-stone-200 rounded-md">
+            <span className="px-2.5 py-1 text-xs font-bold bg-brand-700/90 backdrop-blur-sm text-stone-200 rounded-md">
               {timeEnded ? (language === 'ar' ? 'انتهى الوقت' : 'Time over') : t.statusClosed}
             </span>
           ) : notStarted ? (
@@ -80,8 +80,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Estimated Arrival Badge */}
-        <div className="absolute bottom-3 left-3 bg-stone-950/85 backdrop-blur-md text-stone-200 px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1.5 border border-stone-700/60">
-          <Calendar className="w-3.5 h-3.5 text-amber-400" />
+        <div className="absolute bottom-3 left-3 bg-brand-800/85 backdrop-blur-md text-stone-200 px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1.5 border border-stone-700/60">
+          <Calendar className="w-3.5 h-3.5 text-brand-400" />
           <span>{language === 'ar' ? product.estimatedArrivalAr : product.estimatedArrivalEn}</span>
         </div>
       </div>
@@ -97,7 +97,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Title */}
           <h3 
             onClick={() => onViewDetails(product)}
-            className="text-base font-bold text-stone-900 line-clamp-1 hover:text-amber-600 cursor-pointer transition-colors"
+            className="text-base font-bold text-stone-900 line-clamp-1 hover:text-brand-600 cursor-pointer transition-colors"
           >
             {language === 'ar' ? product.nameAr : product.nameEn}
           </h3>
@@ -120,7 +120,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all duration-500 ${
-                  isClosed ? 'bg-stone-400' : isLimited ? 'bg-gradient-to-r from-amber-500 to-red-500' : 'bg-emerald-600'
+                  isClosed ? 'bg-stone-400' : isLimited ? 'bg-gradient-to-r from-brand-500 to-red-500' : 'bg-emerald-600'
                 }`}
                 style={{ width: `${percentBooked}%` }}
               />
@@ -135,7 +135,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           )}
 
           {/* Price & booking terms */}
-          <div className="mt-4 p-3 rounded-xl bg-amber-50/60 border border-amber-200/80 flex items-end justify-between gap-2">
+          <div className="mt-4 p-3 rounded-xl bg-brand-50/60 border border-brand-200/80 flex items-end justify-between gap-2">
             <div>
               <span className="text-[11px] text-stone-600 block font-medium">{t.totalPrice}</span>
               <div className="flex items-baseline gap-1.5">
@@ -179,7 +179,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             className={`flex-1 py-3 sm:py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
               cannotBook
                 ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                : 'bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 shadow hover:shadow-md'
+                : 'bg-brand-700 hover:bg-brand-800 text-brand-300 hover:text-brand-200 shadow hover:shadow-md'
             }`}
           >
             <span>{timeEnded ? (language === 'ar' ? 'انتهى وقت الحجز' : 'Booking ended') : isClosed ? t.statusClosed : notStarted ? (language === 'ar' ? 'الحجز لسه مبدأش' : 'Not open yet') : `${t.reserveNow} ${formatCurrency(product.depositAmount, currency, language)}`}</span>

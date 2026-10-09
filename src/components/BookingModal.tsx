@@ -6,7 +6,6 @@ import {
   Copy,
   Check,
   Upload,
-  Smartphone,
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
@@ -186,7 +185,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       });
       addCustomerSavedCode(reservation.code);
       try {
-        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b', '#0f172a'] });
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ['#800020', '#e2768c', '#fbe1dd', '#10b981'] });
       } catch { /* ignore */ }
       setCreatedReservation(reservation);
       onReservationCreated(reservation);
@@ -238,7 +237,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             <h2 className="text-lg sm:text-xl font-black text-stone-900 flex items-center gap-2">
               <span>{step === 3 ? (ar ? 'وصل الحجز' : 'Booking Receipt') : t.bookingTitle}</span>
               {step < 3 && (
-                <span className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                <span className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-100 text-brand-800">
                   {step === 1 ? t.step1Customer : t.step2Payment}
                 </span>
               )}
@@ -254,12 +253,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         {step < 3 && (
           <div className="bg-stone-100/70 px-4 py-2.5 border-b border-stone-200/60 flex items-center justify-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 font-bold text-stone-900">
-              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-stone-900 text-white">1</span>
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-brand-700 text-white">1</span>
               <span>{t.step1Customer}</span>
             </div>
             <div className="h-px w-10 sm:w-16 bg-stone-300" />
             <div className={`flex items-center gap-1.5 font-bold ${step >= 2 ? 'text-stone-900' : 'text-stone-400'}`}>
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step >= 2 ? 'bg-stone-900 text-white' : 'bg-stone-300 text-stone-600'}`}>2</span>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step >= 2 ? 'bg-brand-700 text-white' : 'bg-stone-300 text-stone-600'}`}>2</span>
               <span>{t.step2Payment}</span>
             </div>
           </div>
@@ -276,19 +275,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           {/* STEP 1: CUSTOMER DETAILS */}
           {step === 1 && (
             <div className="space-y-4">
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200/80 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <img src={product.images[0]} alt="" className="w-12 h-12 rounded-xl object-cover border border-amber-200 shrink-0" />
+                    <img src={product.images[0]} alt="" className="w-12 h-12 rounded-xl object-cover border border-brand-200 shrink-0" />
                     <h4 className="text-xs sm:text-sm font-bold text-stone-900 line-clamp-2">{productName}</h4>
                   </div>
-                  <div className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 text-amber-300 text-[11px] font-extrabold">
+                  <div className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-brand-700 text-white text-[11px] font-extrabold">
                     <Package className="w-3.5 h-3.5" />
                     <span>{ar ? 'قطعة واحدة' : '1 piece'}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2 sm:text-center">
-                  <div className="p-2 rounded-xl bg-white border border-amber-200/80 flex sm:block items-center justify-between gap-2 px-3 sm:px-2">
+                  <div className="p-2 rounded-xl bg-white border border-brand-200/80 flex sm:block items-center justify-between gap-2 px-3 sm:px-2">
                     <span className="block text-[10px] text-stone-500">{t.totalPrice}</span>
                     <strong className="text-xs sm:text-sm text-stone-900">{formatCurrency(product.price, currency, language)}</strong>
                   </div>
@@ -296,7 +295,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     <span className="block text-[10px] text-emerald-800 font-bold">{ar ? 'تدفع دلوقتي (مقدم)' : 'Pay now (deposit)'}</span>
                     <strong className="text-sm sm:text-base font-black text-emerald-800">{formatCurrency(deposit, currency, language)}</strong>
                   </div>
-                  <div className="p-2 rounded-xl bg-white border border-amber-200/80 flex sm:block items-center justify-between gap-2 px-3 sm:px-2">
+                  <div className="p-2 rounded-xl bg-white border border-brand-200/80 flex sm:block items-center justify-between gap-2 px-3 sm:px-2">
                     <span className="block text-[10px] text-stone-500">{ar ? 'الباقي في الفرع' : 'Rest at branch'}</span>
                     <strong className="text-xs sm:text-sm text-stone-900">{formatCurrency(remaining, currency, language)}</strong>
                   </div>
@@ -370,9 +369,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center">
-                        <Smartphone className="w-4 h-4" />
-                      </div>
+                      <img src="/pay/vodafone-cash.png" alt="Vodafone Cash" className="w-12 h-12 rounded-xl bg-white border border-stone-200 object-contain p-0.5 shrink-0" />
                       <div>
                         <div className="font-bold text-sm text-stone-900">{t.vfCashTitle}</div>
                         <div className="text-[11px] text-stone-500">
@@ -410,7 +407,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px]">IPA</div>
+                      <img src="/pay/instapay.png" alt="InstaPay" className="w-12 h-12 rounded-xl bg-white border border-stone-200 object-contain p-0.5 shrink-0" />
                       <div>
                         <div className="font-bold text-sm text-stone-900">{t.instapayTitle}</div>
                         <div className="text-[11px] text-stone-500">{t.instapayDesc}</div>
@@ -442,18 +439,18 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </div>
 
                 {proofImage ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-stone-300 max-h-48 bg-stone-900 flex items-center justify-center">
+                  <div className="relative rounded-2xl overflow-hidden border border-stone-300 max-h-48 bg-brand-700 flex items-center justify-center">
                     <img src={proofImage} alt="Payment proof" className="max-h-48 object-contain" />
                     <button
                       type="button"
                       onClick={() => setProofImage(null)}
-                      className="absolute top-2 right-2 bg-stone-900/80 text-white text-xs px-2.5 py-1 rounded-lg hover:bg-stone-900"
+                      className="absolute top-2 right-2 bg-brand-700/80 text-white text-xs px-2.5 py-1 rounded-lg hover:bg-brand-700"
                     >
                       {t.changeImage}
                     </button>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-stone-300 rounded-2xl hover:border-amber-500 cursor-pointer bg-white transition-colors">
+                  <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-stone-300 rounded-2xl hover:border-brand-500 cursor-pointer bg-white transition-colors">
                     <Upload className="w-7 h-7 text-stone-400 mb-1.5" />
                     <span className="text-xs font-semibold text-stone-700">{t.uploadDragDrop}</span>
                     <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
@@ -511,8 +508,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
               {/* The receipt (printed / saved as image) */}
               <div id="printable-voucher" ref={voucherRef} dir={ar ? 'rtl' : 'ltr'} className="bg-white max-w-md mx-auto rounded-3xl border-2 border-dashed border-stone-300 overflow-hidden">
-                <div className="bg-stone-900 text-white px-5 py-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5 text-amber-300 text-xs font-bold">
+                <div className="bg-brand-700 text-white px-5 py-4 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-brand-300 text-xs font-bold">
                     <Ticket className="w-4 h-4" />
                     <span>{ar ? 'وصل حجز — كوبون استلام' : 'Booking Receipt — Pickup Coupon'}</span>
                   </div>
@@ -552,8 +549,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       </span>
                       <strong className="text-base font-black text-emerald-800">{formatCurrency(createdReservation.depositAmount, currency, language)}</strong>
                     </div>
-                    <div className="flex items-center justify-between gap-3 p-2 rounded-lg bg-amber-50 border border-amber-200">
-                      <span className="text-amber-950 font-bold">{t.remainingAtBranch}</span>
+                    <div className="flex items-center justify-between gap-3 p-2 rounded-lg bg-brand-50 border border-brand-200">
+                      <span className="text-brand-950 font-bold">{t.remainingAtBranch}</span>
                       <strong className="text-base font-black text-stone-900">{formatCurrency(createdReservation.remainingAmount, currency, language)}</strong>
                     </div>
                   </div>
@@ -586,7 +583,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   </div>
                 </div>
 
-                <div className="mx-4 mb-4 p-3 rounded-2xl bg-stone-900 text-amber-300 text-center text-xs sm:text-sm font-extrabold leading-relaxed">
+                <div className="mx-4 mb-4 p-3 rounded-2xl bg-brand-700 text-white text-center text-xs sm:text-sm font-extrabold leading-relaxed">
                   ⚠️ {t.saveCodeNotice}
                 </div>
               </div>
@@ -599,7 +596,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     setCodeCopied(true);
                     setTimeout(() => setCodeCopied(false), 2000);
                   }}
-                  className="py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs flex items-center justify-center gap-1.5"
+                  className="py-2.5 rounded-xl bg-brand-400 hover:bg-brand-300 text-stone-950 font-extrabold text-xs flex items-center justify-center gap-1.5"
                 >
                   {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   <span>{codeCopied ? t.codeCopied : t.copyCode}</span>
@@ -607,7 +604,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <button
                   onClick={handleSaveVoucherImage}
                   disabled={isSavingImage}
-                  className="py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
+                  className="py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
                 >
                   <Download className="w-4 h-4" />
                   <span>{t.saveVoucherImage}</span>
@@ -655,7 +652,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               <button
                 type="button"
                 onClick={() => validateStep1() && setStep(2)}
-                className="flex-1 sm:flex-none justify-center px-6 py-3 sm:py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-sm font-bold flex items-center gap-2 shadow"
+                className="flex-1 sm:flex-none justify-center px-6 py-3 sm:py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-sm font-bold flex items-center gap-2 shadow"
               >
                 <span>{t.nextToPayment}</span>
                 <ArrowIcon className="w-4 h-4" />
