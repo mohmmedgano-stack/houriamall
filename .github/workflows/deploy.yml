@@ -1,5 +1,7 @@
-# Builds the site and publishes it to GitHub Pages on every push to main.
-name: Deploy to GitHub Pages
+# On every push to main: build the site and publish the built archive to the
+# `hostinger-release` branch. Hostinger pulls that branch and deploys site.zip
+# into public_html for houriamall.shop.
+name: Build Hostinger release
 
 on:
   push:
@@ -7,12 +9,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: hostinger-release
   cancel-in-progress: true
 
 jobs:
@@ -26,19 +26,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Single-page app: serve index.html for /admin and any other path
-      - run: cp dist/index.html dist/404.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Package site.zip
+        run: |
+          mkdir -p release
+          (cd dist && zip -qr ../release/site.zip .)
+          printf 'Built site archive for Hostinger. Generated from main by CI — do not edit by hand.\n' > release/README.md
+      - name: Publish to hostinger-release branch
+        run: |
+          cd release
+          git init -q -b hostinger-release
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Release build from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" hostinger-release

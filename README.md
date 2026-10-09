@@ -12,4 +12,4 @@ npm run dev
 ```
 
 ## النشر
-أي push على `main` بيبني الموقع وينشره تلقائياً على GitHub Pages (`.github/workflows/deploy.yml`).
+أي push على `main` بيبني الموقع ويحط `site.zip` في فرع `hostinger-release`، وHostinger بيسحبه وينشره على houriamall.shop.
