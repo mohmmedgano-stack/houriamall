@@ -3,6 +3,7 @@ import { isoToLocalInput, localInputToIso } from '../utils/bookingWindow';
 import { X, Plus, Trash2, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { Product, Language, ProductStatus } from '../types';
 import { translations } from '../translations';
+import { useEscapeKey } from '../utils/useDismiss';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -21,7 +22,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   language,
   currency,
 }) => {
-  if (!isOpen) return null;
   const t = translations[language];
 
   const [nameAr, setNameAr] = useState('');
@@ -156,8 +156,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     onClose();
   };
 
+  useEscapeKey(onClose, isOpen);
+  if (!isOpen) return null;
+
   return (
-    <div className="sheet-overlay">
+    <div className="sheet-overlay" onClick={onClose}>
       <div 
         className="sheet-panel sm:max-w-2xl"
         onClick={(e) => e.stopPropagation()}

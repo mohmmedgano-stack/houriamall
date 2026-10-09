@@ -1,12 +1,8 @@
-import { Product, Reservation, MerchantSettings, NotificationItem } from '../types';
-import { INITIAL_PRODUCTS, INITIAL_RESERVATIONS, INITIAL_MERCHANT_SETTINGS, INITIAL_NOTIFICATIONS } from '../data/initialData';
+import { Reservation } from '../types';
 
+// Only the visitor's own booking codes are kept on the device ("حجوزاتي"); all data lives on the server
 const STORAGE_KEYS = {
-  PRODUCTS: 'hozozati_products_v5',
-  RESERVATIONS: 'hozozati_reservations_v5',
-  SETTINGS: 'hozozati_settings_v5',
-  NOTIFICATIONS: 'hozozati_notifications_v5',
-  CUSTOMER_SAVED_CODES: 'hozozati_customer_codes_v5',
+  CUSTOMER_SAVED_CODES: 'houria_my_booking_codes',
 };
 
 export function loadCustomerSavedCodes(): string[] {
@@ -37,78 +33,6 @@ export function addCustomerSavedCode(code: string) {
     }
   } catch (e) {
     console.error('Failed to add customer code', e);
-  }
-}
-
-export function loadProducts(): Product[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-    if (data) return JSON.parse(data);
-  } catch (e) {
-    console.error('Failed to load products from storage', e);
-  }
-  return INITIAL_PRODUCTS;
-}
-
-export function saveProducts(products: Product[]) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-  } catch (e) {
-    console.error('Failed to save products', e);
-  }
-}
-
-export function loadReservations(): Reservation[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.RESERVATIONS);
-    if (data) return JSON.parse(data);
-  } catch (e) {
-    console.error('Failed to load reservations', e);
-  }
-  return INITIAL_RESERVATIONS;
-}
-
-export function saveReservations(reservations: Reservation[]) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.RESERVATIONS, JSON.stringify(reservations));
-  } catch (e) {
-    console.error('Failed to save reservations', e);
-  }
-}
-
-export function loadMerchantSettings(): MerchantSettings {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    if (data) return { ...INITIAL_MERCHANT_SETTINGS, ...JSON.parse(data) };
-  } catch (e) {
-    console.error('Failed to load settings', e);
-  }
-  return INITIAL_MERCHANT_SETTINGS;
-}
-
-export function saveMerchantSettings(settings: MerchantSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  } catch (e) {
-    console.error('Failed to save settings', e);
-  }
-}
-
-export function loadNotifications(): NotificationItem[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-    if (data) return JSON.parse(data);
-  } catch (e) {
-    console.error('Failed to load notifications', e);
-  }
-  return INITIAL_NOTIFICATIONS;
-}
-
-export function saveNotifications(notifications: NotificationItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-  } catch (e) {
-    console.error('Failed to save notifications', e);
   }
 }
 

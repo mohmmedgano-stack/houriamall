@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Product, Language, MerchantSettings } from '../types';
 import { BranchesCard } from './BranchesCard';
+import { useEscapeKey } from '../utils/useDismiss';
 import { translations } from '../translations';
 import { formatCurrency } from '../utils/storage';
 import { canBookNow, getBookingWindow, useNow } from '../utils/bookingWindow';
@@ -40,6 +41,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 }) => {
   const [selectedImg, setSelectedImg] = useState(0);
   const now = useNow(1000);
+  useEscapeKey(onClose, isOpen);
   if (!isOpen || !product) return null;
 
   const t = translations[language];

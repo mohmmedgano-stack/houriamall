@@ -28,7 +28,8 @@ import {
   addCustomerSavedCode,
   whatsappLink,
 } from '../utils/storage';
-import { playNewReservationChime } from '../utils/audio';
+import { createBooking, compressImage } from '../utils/api';
+import { useEscapeKey } from '../utils/useDismiss';
 import { canBookNow, getBookingWindow } from '../utils/bookingWindow';
 import { CountdownTimer } from './CountdownTimer';
 
@@ -41,7 +42,6 @@ interface BookingModalProps {
   language: Language;
   currency: string;
   merchantSettings: MerchantSettings;
-  existingReservations: Reservation[];
 }
 
 // "+20 106 111 3915" and "01061113915" compare equal
@@ -59,7 +59,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   language,
   currency,
   merchantSettings,
-  existingReservations,
 }) => {
   // Hooks first (the modal is mounted only while open, see App.tsx)
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -82,6 +81,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isSavingImage, setIsSavingImage] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const voucherRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(onClose, isOpen);
 
   if (!isOpen || !product) return null;
 
@@ -103,15 +103,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setProofImage(reader.result as string);
+    try {
+      setProofImage(await compressImage(file));
       setErrorMessage('');
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setErrorMessage(ar ? 'الملف ده مش صورة، اختار صورة التحويل.' : 'That file is not an image.');
+    }
   };
 
   // Booking window / stock may change while the form is open (timer runs out)
@@ -121,13 +121,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     if (w.state === 'ended') return ar ? 'للأسف وقت الحجز على المنتج ده خلص.' : 'Sorry, booking time for this product is over.';
     if (w.state === 'not_started') return ar ? 'الحجز على المنتج ده لسه مبدأش.' : 'Booking for this product has not opened yet.';
     return ar ? 'للأسف الكمية المتاحة للحجز خلصت.' : 'Sorry, this product is fully booked.';
-  };
-
-  const findDuplicateBooking = () => {
-    const phone = normalizePhone(customerPhone);
-    return existingReservations.find(
-      r => r.productId === product.id && r.reservationStatus !== 'cancelled' && normalizePhone(r.customerPhone) === phone
-    );
   };
 
   const validateStep1 = () => {
@@ -142,15 +135,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
     if (normalizePhone(customerPhone).length < 10) {
       setErrorMessage(ar ? 'يرجى إدخال رقم موبايل صحيح' : 'Please enter a valid mobile number');
-      return false;
-    }
-    const dup = findDuplicateBooking();
-    if (dup) {
-      setErrorMessage(
-        ar
-          ? `الرقم ده عنده حجز بالفعل لنفس المنتج (كود ${dup.code}). مسموح بقطعة واحدة بس لكل عميل.`
-          : `This number already has a booking for this product (code ${dup.code}). One piece per customer.`
-      );
       return false;
     }
     setErrorMessage('');
@@ -170,7 +154,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       `(هبعت صورة التحويل في الرسالة الجاية)`
   );
 
-  const handleSubmitReservation = () => {
+  const handleSubmitReservation = async () => {
     const closed = bookingClosedMessage();
     if (closed) {
       setErrorMessage(closed);
@@ -184,64 +168,34 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       );
       return;
     }
-    const dup = findDuplicateBooking();
-    if (dup) {
-      setErrorMessage(ar ? `الرقم ده عنده حجز بالفعل لنفس المنتج (كود ${dup.code}).` : `Already booked (code ${dup.code}).`);
-      return;
-    }
 
     setIsSubmitting(true);
     setErrorMessage('');
-
-    setTimeout(() => {
-      const nowIso = new Date().toISOString();
-      const proofNoteAr = proofImage ? 'تم رفع صورة التحويل' : proofSentOnWhatsApp ? 'صورة التحويل اتبعتت على واتساب' : 'تم إدخال رقم العملية';
-      const proofNoteEn = proofImage ? 'screenshot uploaded' : proofSentOnWhatsApp ? 'screenshot sent on WhatsApp' : 'reference number entered';
-
-      const newReservation: Reservation = {
-        id: `rsv-${Date.now()}`,
-        code: bookingCode,
+    try {
+      // The server checks stock, the booking timer and one-piece-per-customer, then saves everything
+      const reservation = await createBooking({
         productId: product.id,
-        productNameAr: product.nameAr,
-        productNameEn: product.nameEn,
-        productImage: product.images[0] || '',
-        totalPrice: product.price,
-        depositAmount: deposit,
-        remainingAmount: remaining,
-        quantity: 1,
+        code: bookingCode,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         customerNotes: customerNotes.trim() || undefined,
         paymentMethod: selectedMethod,
         paymentReferenceNumber: referenceNumber.trim() || undefined,
-        paymentProofUrl: proofImage || undefined,
+        proofImage: proofImage || undefined,
         proofSentOnWhatsApp: proofSentOnWhatsApp || undefined,
-        paymentStatus: 'pending_verification',
-        reservationStatus: 'pending',
-        createdAt: nowIso,
-        estimatedDeliveryAr: product.estimatedArrivalAr,
-        estimatedDeliveryEn: product.estimatedArrivalEn,
-        history: [
-          {
-            status: 'pending',
-            timestamp: nowIso,
-            noteAr: `تم تسجيل الحجز (قطعة واحدة) ودفع مقدم ${formatCurrency(deposit, merchantSettings.currencyAr, 'ar')} ${selectedMethod === 'instapay' ? 'إنستاباي' : 'فودافون كاش'} — ${proofNoteAr}. قيد المراجعة.`,
-            noteEn: `Booking registered (1 piece), deposit paid via ${selectedMethod === 'instapay' ? 'InstaPay' : 'Vodafone Cash'} — ${proofNoteEn}. Under review.`,
-          },
-        ],
-      };
-
-      addCustomerSavedCode(bookingCode);
-      if (merchantSettings.soundAlertEnabled) playNewReservationChime();
+      });
+      addCustomerSavedCode(reservation.code);
       try {
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b', '#0f172a'] });
       } catch { /* ignore */ }
-
-      setCreatedReservation(newReservation);
-      onReservationCreated(newReservation);
-      setIsSubmitting(false);
+      setCreatedReservation(reservation);
+      onReservationCreated(reservation);
       setStep(3);
-    }, 600);
+    } catch (err: any) {
+      setErrorMessage(err?.message || (ar ? 'حصل خطأ، جرّب تاني.' : 'Something went wrong, try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSaveVoucherImage = async () => {
@@ -250,7 +204,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     try {
       const dataUrl = await toPng(voucherRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
       const link = document.createElement('a');
-      link.download = `${bookingCode}.png`;
+      link.download = `${createdReservation?.code || bookingCode}.png`;
       link.href = dataUrl;
       link.click();
     } catch {
@@ -273,7 +227,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     );
 
   return (
-    <div className="sheet-overlay">
+    <div className="sheet-overlay" onClick={onClose}>
       <div
         className="sheet-panel sm:max-w-2xl"
         onClick={(e) => e.stopPropagation()}

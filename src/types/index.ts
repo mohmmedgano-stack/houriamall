@@ -74,6 +74,7 @@ export interface Reservation {
   paymentReferenceNumber?: string;
   paymentProofUrl?: string;               // Uploaded transfer screenshot (base64)
   proofSentOnWhatsApp?: boolean;          // Customer chose to send the screenshot on WhatsApp
+  hasProofImage?: boolean;                // Server: a screenshot was uploaded (customer view)
   paymentStatus: PaymentStatus;
   reservationStatus: ReservationStatus;
   createdAt: string;

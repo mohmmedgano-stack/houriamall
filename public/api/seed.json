@@ -1,0 +1,46 @@
+{
+  "settings": {
+    "storeNameAr": "حورية مول",
+    "storeNameEn": "Houria Mall",
+    "sloganAr": "احجز قطعتك بمقدم بسيط فودافون كاش أو إنستاباي، واستلم من الفرع وادفع الباقي هناك",
+    "sloganEn": "Reserve your piece with a small deposit via Vodafone Cash or InstaPay, then pick it up at our branch and pay the rest",
+    "currencyAr": "ج.م",
+    "currencyEn": "EGP",
+    "vodafoneCashNumbers": [
+      "01061113915",
+      "01068825121",
+      "01026135927"
+    ],
+    "instapayAddress": "01061113915",
+    "whatsappNumber": "01061113915",
+    "supportPhone": "01061113915",
+    "soundAlertEnabled": true,
+    "branchAddressAr": "",
+    "branchAddressEn": "",
+    "depositInstructionsAr": "حوّل مبلغ المقدم على فودافون كاش أو إنستاباي، وبعدين ارفع صورة التحويل هنا أو ابعتها لنا على واتساب. باقي المبلغ بيتدفع في الفرع وقت الاستلام.",
+    "announcementEnabled": true,
+    "announcementAr": "احجز قطعتك بمقدم بسيط فودافون كاش أو إنستاباي واستلم من الفرع",
+    "branchesTitleAr": "عنوان فروعنا💓",
+    "branches": [
+      {
+        "name": "فرع البيتي",
+        "address": "المنصورة - شارع مستشفى العام متفرع من الجلاء، مقابل قطونيل"
+      },
+      {
+        "name": "فرع الكاجوال",
+        "address": "المنصورة - شارع الجلاء بجوار مسجد الجمال"
+      },
+      {
+        "name": "فرع المفروشات والأدوات المنزلية",
+        "address": "المنصورة - شارع الجلاء بجوار فرع الكاجوال"
+      }
+    ],
+    "branchPhones": [
+      "0502946699",
+      "01061113915",
+      "01068825121"
+    ],
+    "announcementEn": "Reserve your piece with a small deposit and pick it up at the branch",
+    "depositInstructionsEn": "Transfer the deposit via Vodafone Cash or InstaPay, then upload the transfer screenshot here or send it to us on WhatsApp. The rest is paid at the branch on pickup."
+  }
+}

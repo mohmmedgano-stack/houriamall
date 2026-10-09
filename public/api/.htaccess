@@ -1,0 +1,17 @@
+# Only index.php is reachable; helper files, seed data and any local data stay private
+<FilesMatch "^(lib\.php|seed\.json)$">
+  Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^_data(/|$) - [F,L]
+</IfModule>
+# Pass the admin token through to PHP on servers that strip Authorization
+<IfModule mod_rewrite.c>
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-store" "expr=%{QUERY_STRING} !~ /action=media/"
+</IfModule>
+Options -Indexes

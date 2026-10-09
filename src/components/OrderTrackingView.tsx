@@ -28,9 +28,9 @@ import {
 import { Reservation, Language, MerchantSettings, ReservationStatus } from '../types';
 import { translations } from '../translations';
 import { formatCurrency, formatDate, loadCustomerSavedCodes, addCustomerSavedCode, whatsappLink } from '../utils/storage';
+import { trackBookings, fetchBookingsByCodes } from '../utils/api';
 
 interface OrderTrackingViewProps {
-  reservations: Reservation[];
   initialCode?: string;
   language: Language;
   currency: string;
@@ -39,7 +39,6 @@ interface OrderTrackingViewProps {
 }
 
 export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
-  reservations,
   initialCode = '',
   language,
   currency,
@@ -57,40 +56,58 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [savedCodes, setSavedCodes] = useState<string[]>([]);
+  // Bookings this device made / looked up before ("حجوزاتي"), loaded from the server
+  const [savedReservationsList, setSavedReservationsList] = useState<Reservation[]>([]);
+  const [results, setResults] = useState<Reservation[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
-  // Load customer's saved codes from storage on mount
+  const rememberCodes = (list: Reservation[]) => {
+    list.forEach(r => addCustomerSavedCode(r.code));
+    setSavedCodes(loadCustomerSavedCodes());
+  };
+
+  const runSearch = async (raw: string) => {
+    const q = raw.trim();
+    if (!q) return;
+    setIsSearching(true);
+    setSearchError('');
+    try {
+      const list = await trackBookings(q);
+      setResults(list);
+      setActiveReservation(list[0] || null);
+      setSearched(true);
+      rememberCodes(list);
+    } catch (e: any) {
+      setSearchError(e?.message || 'حصل خطأ، جرّب تاني');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Load this device's saved bookings from the server
   useEffect(() => {
     const codes = loadCustomerSavedCodes();
     setSavedCodes(codes);
+    fetchBookingsByCodes(codes).then(setSavedReservationsList).catch(() => {});
   }, []);
 
-  // Check URL query parameters or props
+  // Refresh the saved list whenever a new code is remembered
   useEffect(() => {
-    // Check URL query param e.g. ?track=RSV-XXXX or ?code=RSV-XXXX
-    let codeToLoad = initialCode;
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlTrack = urlParams.get('track') || urlParams.get('code');
-      if (urlTrack) {
-        codeToLoad = urlTrack;
-      }
-    }
+    if (savedCodes.length) fetchBookingsByCodes(savedCodes).then(setSavedReservationsList).catch(() => {});
+  }, [savedCodes.join(',')]);
 
+  // Open a booking passed in the link (?track=RSV-XXXX) or from the booking receipt
+  useEffect(() => {
+    let codeToLoad = initialCode;
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTrack = urlParams.get('track') || urlParams.get('code');
+    if (urlTrack) codeToLoad = urlTrack;
     if (codeToLoad) {
       setSearchInput(codeToLoad);
-      const normalized = codeToLoad.trim().toUpperCase();
-      const digits = normalized.replace(/[^0-9]/g, '');
-      const found = reservations.find(
-        r => r.code.toUpperCase() === normalized || (digits.length >= 8 && r.customerPhone.replace(/[^0-9]/g, '').includes(digits))
-      );
-      setSearched(true);
-      setActiveReservation(found || null);
-      if (found) {
-        addCustomerSavedCode(found.code);
-        setSavedCodes(loadCustomerSavedCodes());
-      }
+      runSearch(codeToLoad);
     }
-  }, [initialCode, reservations]);
+  }, [initialCode]);
 
   // Update URL query string when active reservation changes (for direct link sharing)
   useEffect(() => {
@@ -103,27 +120,15 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
   const handleSearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!searchInput.trim()) return;
-
-    const normalized = searchInput.trim().toUpperCase();
-    const found = reservations.find(
-      r => r.code.toUpperCase() === normalized || r.customerPhone.includes(normalized)
-    );
-
-    setActiveReservation(found || null);
-    setSearched(true);
-
-    if (found) {
-      addCustomerSavedCode(found.code);
-      setSavedCodes(loadCustomerSavedCodes());
-    }
+    runSearch(searchInput);
   };
 
   const handleSelectSavedCode = (code: string) => {
     setSearchInput(code);
-    const found = reservations.find(r => r.code.toUpperCase() === code.toUpperCase());
+    const found = savedReservationsList.find(r => r.code.toUpperCase() === code.toUpperCase());
     if (found) {
       setActiveReservation(found);
+      setResults([found]);
       setSearched(true);
       setActivePortalTab('search');
     }
@@ -235,8 +240,6 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
     return whatsappLink(merchantSettings.whatsappNumber, textAr);
   };
 
-  // Find saved reservations for "My Bookings" tab
-  const savedReservationsList = reservations.filter(r => savedCodes.includes(r.code));
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-5 sm:py-12 space-y-4 sm:space-y-6">
@@ -304,11 +307,30 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
               </div>
               <button
                 type="submit"
-                className="py-3 px-4 sm:px-5 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs sm:text-sm rounded-xl shadow transition-colors shrink-0"
+                disabled={isSearching}
+                className="py-3 px-4 sm:px-5 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs sm:text-sm rounded-xl shadow transition-colors shrink-0 disabled:opacity-60"
               >
-                {t.trackButton}
+                {isSearching ? (language === 'ar' ? 'بدوّر...' : 'Searching...') : t.trackButton}
               </button>
             </form>
+            {searchError && (
+              <p className="mt-3 text-xs font-bold text-red-600">{searchError}</p>
+            )}
+            {results.length > 1 && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-stone-500">
+                <span>{language === 'ar' ? `لقينا ${results.length} حجوزات بالرقم ده:` : `${results.length} bookings found:`}</span>
+                {results.map(r => (
+                  <button
+                    key={r.code}
+                    type="button"
+                    onClick={() => setActiveReservation(r)}
+                    className={`font-mono font-bold px-2 py-0.5 rounded border transition-colors ${activeReservation?.code === r.code ? 'bg-stone-900 text-amber-300 border-stone-900' : 'text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-300/80'}`}
+                  >
+                    {r.code}
+                  </button>
+                ))}
+              </div>
+            )}
 
           </div>
         )}
@@ -587,7 +609,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                 </div>
                 <div className="flex justify-between text-stone-600">
                   <span>إثبات التحويل:</span>
-                  <strong className="text-stone-900">{activeReservation.paymentProofUrl ? 'صورة مرفوعة' : activeReservation.proofSentOnWhatsApp ? 'اتبعت على واتساب' : (activeReservation.paymentReferenceNumber || '—')}</strong>
+                  <strong className="text-stone-900">{(activeReservation.hasProofImage || activeReservation.paymentProofUrl) ? 'صورة مرفوعة' : activeReservation.proofSentOnWhatsApp ? 'اتبعت على واتساب' : (activeReservation.paymentReferenceNumber || '—')}</strong>
                 </div>
                 {activeReservation.customerNotes && (
                   <div className="pt-1 text-[11px] text-stone-500 border-t border-stone-200">

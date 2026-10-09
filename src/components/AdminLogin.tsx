@@ -1,30 +1,32 @@
 import React, { useState } from 'react';
 import { Lock, User, ShoppingBag, ArrowRight, Eye, EyeOff } from 'lucide-react';
-import { MerchantSettings } from '../types';
 
 interface AdminLoginProps {
-  merchantSettings: MerchantSettings;
-  onSuccess: () => void;
+  storeName: string;
+  onLogin: (username: string, password: string) => Promise<void>;
   onBackToSite: () => void;
 }
 
 // Login portal for the private admin dashboard (username + password)
-export const AdminLogin: React.FC<AdminLoginProps> = ({ merchantSettings, onSuccess, onBackToSite }) => {
+export const AdminLogin: React.FC<AdminLoginProps> = ({ storeName, onLogin, onBackToSite }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) {
       setError('اكتب اسم المستخدم والباسورد');
       return;
     }
-    if (username.trim().toLowerCase() === merchantSettings.adminUsername.trim().toLowerCase() && password === merchantSettings.adminPassword) {
-      onSuccess();
-    } else {
-      setError('اسم المستخدم أو الباسورد غلط، جرّب تاني.');
+    setBusy(true);
+    try {
+      await onLogin(username.trim(), password);
+    } catch (err: any) {
+      setError(err?.message || 'اسم المستخدم أو الباسورد غلط، جرّب تاني.');
+      setBusy(false);
     }
   };
 
@@ -35,7 +37,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ merchantSettings, onSucc
           <div className="w-14 h-14 rounded-2xl bg-stone-900 flex items-center justify-center mx-auto">
             <ShoppingBag className="w-7 h-7 text-amber-400" />
           </div>
-          <h1 className="mt-3 text-xl font-black text-stone-900">{merchantSettings.storeNameAr}</h1>
+          <h1 className="mt-3 text-xl font-black text-stone-900">{storeName}</h1>
           <p className="text-xs text-stone-500 mt-1">تسجيل الدخول للوحة التحكم</p>
         </div>
 
@@ -89,8 +91,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ merchantSettings, onSucc
           </div>
         </div>
 
-        <button type="submit" className="w-full py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-extrabold text-sm">
-          تسجيل الدخول
+        <button type="submit" disabled={busy} className="w-full py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-extrabold text-sm disabled:opacity-60">
+          {busy ? 'جاري الدخول...' : 'تسجيل الدخول'}
         </button>
 
         <button type="button" onClick={onBackToSite} className="w-full text-xs text-stone-500 hover:text-stone-900 flex items-center justify-center gap-1 pt-1">

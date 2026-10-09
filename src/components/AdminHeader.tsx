@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { useClickOutside } from '../utils/useDismiss';
 import { Bell, Volume2, VolumeX, ShoppingBag, ExternalLink, LogOut } from 'lucide-react';
 import { NotificationItem, MerchantSettings } from '../types';
 import { formatDate } from '../utils/storage';
@@ -28,6 +29,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onLogout,
 }) => {
   const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  useClickOutside(dropdownRef, () => setOpen(false), open);
 
   return (
     <header className="sticky top-0 z-40 bg-stone-900 text-white border-b border-stone-800">
@@ -51,7 +54,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             {merchantSettings.soundAlertEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg border border-stone-700 hover:bg-stone-800" aria-label="التنبيهات">
               <Bell className="w-4 h-4" />
               {unreadCount > 0 && (

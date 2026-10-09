@@ -43,6 +43,7 @@ import { translations } from '../translations';
 import { formatCurrency, formatDate, exportReservationsToCSV, whatsappLink } from '../utils/storage';
 import { NewProductModal } from './NewProductModal';
 import { getBookingWindow, splitDuration, useNow } from '../utils/bookingWindow';
+import { useEscapeKey } from '../utils/useDismiss';
 
 interface MerchantDashboardProps {
   products: Product[];
@@ -53,6 +54,8 @@ interface MerchantDashboardProps {
   onUpdateReservations: (reservations: Reservation[]) => void;
   onUpdateProducts: (products: Product[]) => void;
   onUpdateSettings: (settings: MerchantSettings) => void;
+  onSaveCredentials: (username: string, current: string, next: string) => Promise<void>;
+  onDeleteReservations: (ids: string[]) => Promise<void>;
   selectedReservationCode?: string;
 }
 
@@ -65,6 +68,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   onUpdateReservations,
   onUpdateProducts,
   onUpdateSettings,
+  onSaveCredentials,
+  onDeleteReservations,
   selectedReservationCode,
 }) => {
   const t = translations[language];
@@ -89,6 +94,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   // Settings form local state
   const [settingsForm, setSettingsForm] = useState<MerchantSettings>(merchantSettings);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
+  useEscapeKey(() => setInspectReservation(null), Boolean(inspectReservation));
   // Login credentials form (separate from the store settings form)
   const [credUsername, setCredUsername] = useState(merchantSettings.adminUsername);
   const [credCurrent, setCredCurrent] = useState('');
@@ -218,25 +224,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     });
     onUpdateReservations(updated);
 
-    // Keep product slots in sync: a cancelled booking frees its one piece
-    const before = reservations.find(r => r.id === resId);
-    if (before && before.reservationStatus !== newStatus) {
-      const wasCancelled = before.reservationStatus === 'cancelled';
-      const isCancelled = newStatus === 'cancelled';
-      if (wasCancelled !== isCancelled) {
-        const delta = isCancelled ? -1 : 1;
-        onUpdateProducts(products.map(p => {
-          if (p.id !== before.productId) return p;
-          const reservedCount = Math.max(0, p.reservedCount + delta);
-          return {
-            ...p,
-            reservedCount,
-            status: reservedCount >= p.reservationQuota ? 'closed' : (p.status === 'closed' ? 'active' : p.status),
-          };
-        }));
-      }
-    }
-
     if (inspectReservation?.id === resId) {
       setInspectReservation(updated.find(r => r.id === resId) || null);
     }
@@ -302,28 +289,47 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     setTimeout(() => setSettingsSavedToast(false), 3000);
   };
 
-  const handleSaveCredentials = (e: React.FormEvent) => {
+  const [credSaving, setCredSaving] = useState(false);
+  const handleSaveCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     const username = credUsername.trim();
     if (!username) {
       setCredMessage({ ok: false, text: 'اكتب اسم المستخدم' });
       return;
     }
-    if (credCurrent !== merchantSettings.adminPassword) {
-      setCredMessage({ ok: false, text: 'الباسورد الحالي غلط' });
+    if (!credCurrent) {
+      setCredMessage({ ok: false, text: 'اكتب الباسورد الحالي' });
       return;
     }
     if (credNew && credNew !== credConfirm) {
       setCredMessage({ ok: false, text: 'الباسورد الجديد وتأكيده مش زي بعض' });
       return;
     }
-    const updated = { ...merchantSettings, adminUsername: username, adminPassword: credNew || merchantSettings.adminPassword };
-    onUpdateSettings(updated);
-    setSettingsForm(f => ({ ...f, adminUsername: updated.adminUsername, adminPassword: updated.adminPassword }));
-    setCredCurrent('');
-    setCredNew('');
-    setCredConfirm('');
-    setCredMessage({ ok: true, text: credNew ? 'تم تغيير اسم المستخدم والباسورد ✓' : 'تم حفظ اسم المستخدم ✓' });
+    setCredSaving(true);
+    try {
+      await onSaveCredentials(username, credCurrent, credNew);
+      setCredCurrent('');
+      setCredNew('');
+      setCredConfirm('');
+      setCredMessage({ ok: true, text: credNew ? 'تم تغيير اسم المستخدم والباسورد ✓' : 'تم حفظ اسم المستخدم ✓' });
+    } catch (err: any) {
+      setCredMessage({ ok: false, text: err?.message || 'مقدرتش أحفظ، جرّب تاني' });
+    } finally {
+      setCredSaving(false);
+    }
+  };
+
+  // Delete bookings: tap once to arm, tap again within 4s to delete
+  const [pendingDeleteResId, setPendingDeleteResId] = useState<string | null>(null);
+  const handleDeleteReservation = async (resId: string) => {
+    if (pendingDeleteResId !== resId) {
+      setPendingDeleteResId(resId);
+      setTimeout(() => setPendingDeleteResId(cur => (cur === resId ? null : cur)), 4000);
+      return;
+    }
+    setPendingDeleteResId(null);
+    if (inspectReservation?.id === resId) setInspectReservation(null);
+    await onDeleteReservations([resId]);
   };
 
   const getWhatsAppLink = (phone: string, text: string) => {
@@ -648,6 +654,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                             </a>
+
+                            <button
+                              onClick={() => handleDeleteReservation(res.id)}
+                              className={`p-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-colors ${pendingDeleteResId === res.id ? 'bg-red-600 text-white' : 'bg-red-50 hover:bg-red-100 text-red-600'}`}
+                              title="حذف الطلب"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              {pendingDeleteResId === res.id && <span>متأكد؟</span>}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -660,7 +675,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
           {/* INSPECT RESERVATION SLIDE-OVER MODAL */}
           {inspectReservation && (
-            <div className="sheet-overlay">
+            <div className="sheet-overlay" onClick={() => setInspectReservation(null)}>
               <div 
                 className="sheet-panel sm:max-w-2xl"
                 onClick={(e) => e.stopPropagation()}
@@ -822,12 +837,21 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <span>مراسلة واتساب</span>
                   </a>
 
-                  <button
-                    onClick={() => setInspectReservation(null)}
-                    className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 text-xs font-bold"
-                  >
-                    إغلاق
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeleteReservation(inspectReservation.id)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${pendingDeleteResId === inspectReservation.id ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{pendingDeleteResId === inspectReservation.id ? 'متأكد؟ دوس تاني' : 'حذف الطلب'}</span>
+                    </button>
+                    <button
+                      onClick={() => setInspectReservation(null)}
+                      className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 text-xs font-bold"
+                    >
+                      إغلاق
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1427,8 +1451,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               </div>
             </div>
             <div className="flex justify-end">
-              <button type="submit" className="py-2.5 px-5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs">
-                حفظ بيانات الدخول
+              <button type="submit" disabled={credSaving} className="py-2.5 px-5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs disabled:opacity-60">
+                {credSaving ? 'جاري الحفظ...' : 'حفظ بيانات الدخول'}
               </button>
             </div>
           </form>
