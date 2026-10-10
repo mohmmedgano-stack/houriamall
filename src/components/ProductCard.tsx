@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   Calendar, 
   CheckCircle2, 
@@ -8,7 +8,8 @@ import {
   ArrowLeft,
   ChevronRight,
   Info,
-  Layers
+  Layers,
+  Images
 } from 'lucide-react';
 import { Product, Language, MerchantSettings } from '../types';
 import { translations } from '../translations';
@@ -49,12 +50,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       
       {/* Product Image & Badges */}
       <div className="relative aspect-[16/10] sm:aspect-[4/3] w-full max-w-full overflow-hidden bg-stone-100">
-        <img
-          src={product.images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
-          alt={language === 'ar' ? product.nameAr : product.nameEn}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
+        <CardGallery images={product.images} alt={language === 'ar' ? product.nameAr : product.nameEn} />
 
         {/* Status Tag */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
@@ -179,7 +175,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             className={`flex-1 py-3 sm:py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
               cannotBook
                 ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                : 'bg-brand-700 hover:bg-brand-800 text-brand-300 hover:text-brand-200 shadow hover:shadow-md'
+                : 'bg-brand-700 hover:bg-brand-800 text-white hover:text-white shadow hover:shadow-md'
             }`}
           >
             <span>{timeEnded ? (language === 'ar' ? 'انتهى وقت الحجز' : 'Booking ended') : isClosed ? t.statusClosed : notStarted ? (language === 'ar' ? 'الحجز لسه مبدأش' : 'Not open yet') : `${t.reserveNow} ${formatCurrency(product.depositAmount, currency, language)}`}</span>
@@ -190,5 +186,57 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
     </div>
+  );
+};
+
+
+/** Swipeable photo strip for the product card (scroll-snap, works in RTL). */
+const CardGallery: React.FC<{ images: string[]; alt: string }> = ({ images, alt }) => {
+  const list = images.length > 0 ? images : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'];
+  const ref = useRef<HTMLDivElement>(null);
+  const [idx, setIdx] = useState(0);
+  const onScroll = () => {
+    const el = ref.current; if (!el) return;
+    setIdx(Math.min(list.length - 1, Math.round(Math.abs(el.scrollLeft) / el.clientWidth)));
+  };
+  const goTo = (i: number) => {
+    const el = ref.current; if (!el) return;
+    const dir = getComputedStyle(el).direction === 'rtl' ? -1 : 1;
+    el.scrollTo({ left: dir * i * el.clientWidth, behavior: 'smooth' });
+  };
+  return (
+    <>
+      <div ref={ref} onScroll={onScroll} className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {list.map((src, i) => (
+          <img
+            key={i}
+            src={src}
+            alt={alt}
+            loading={i === 0 ? 'eager' : 'lazy'}
+            draggable={false}
+            className="w-full h-full shrink-0 snap-center object-cover"
+          />
+        ))}
+      </div>
+      {list.length > 1 && (
+        <>
+          <div className="absolute bottom-3 right-3 z-10 px-2 py-0.5 rounded-md bg-black/55 text-white text-[10px] font-bold flex items-center gap-1">
+            <Images className="w-3 h-3" />
+            <span>{idx + 1}/{list.length}</span>
+          </div>
+          <div className="absolute bottom-12 inset-x-0 z-10 flex items-center justify-center gap-1.5 pointer-events-none">
+            {list.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => goTo(i)}
+                aria-label={`صورة ${i + 1}`}
+                className={`pointer-events-auto h-1.5 rounded-full transition-all ${i === idx ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </>
   );
 };

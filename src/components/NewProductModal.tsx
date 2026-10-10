@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { isoToLocalInput, localInputToIso } from '../utils/bookingWindow';
 import { X, Plus, Trash2, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { compressImage } from '../utils/api';
 import { Product, Language, ProductStatus } from '../types';
 import { translations } from '../translations';
 import { useEscapeKey } from '../utils/useDismiss';
@@ -36,7 +37,30 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [status, setStatus] = useState<ProductStatus>('active');
   const [descriptionAr, setDescriptionAr] = useState('');
   const [descriptionEn, setDescriptionEn] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [imageBusy, setImageBusy] = useState(false);
+  const MAX_IMAGES = 8;
+  const addImages = (list: string[]) => setImages(prev => [...prev, ...list.filter(u => u && !prev.includes(u))].slice(0, MAX_IMAGES));
+  const removeImage = (i: number) => setImages(prev => prev.filter((_, idx) => idx !== i));
+  const makeMain = (i: number) => setImages(prev => [prev[i], ...prev.filter((_, idx) => idx !== i)]);
+  const moveImage = (i: number, dir: -1 | 1) => setImages(prev => {
+    const j = i + dir; if (j < 0 || j >= prev.length) return prev;
+    const next = [...prev]; [next[i], next[j]] = [next[j], next[i]]; return next;
+  });
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setImageBusy(true);
+    try {
+      const room = MAX_IMAGES - images.length;
+      const picked = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, Math.max(0, room));
+      const out: string[] = [];
+      for (const f of picked) {
+        try { out.push(await compressImage(f, 1400, 0.8)); } catch { /* skip unreadable file */ }
+      }
+      addImages(out);
+    } finally { setImageBusy(false); }
+  };
   const [featuresArText, setFeaturesArText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   // Booking countdown window (datetime-local values)
@@ -71,7 +95,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setEndsAtLocal(isoToLocalInput(productToEdit.bookingEndsAt));
       setDescriptionAr(productToEdit.descriptionAr);
       setDescriptionEn(productToEdit.descriptionEn);
-      setImageUrl(productToEdit.images[0] || '');
+      setImages(productToEdit.images || []);
       setFeaturesArText(productToEdit.featuresAr?.join('\n') || '');
     } else {
       setNameAr('');
@@ -89,7 +113,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setEndsAtLocal('');
       setDescriptionAr('');
       setDescriptionEn('');
-      setImageUrl(sampleImages[0]);
+      setImages([]);
       setFeaturesArText('ضمان أصالة معتمد لمدة عامين\nشحن سريع ومجاني عند وصول الدفعة\nمقدم بسيط والباقي عند الاستلام من الفرع');
     }
   }, [productToEdit]);
@@ -146,7 +170,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       bookingEndsAt,
       descriptionAr: descriptionAr.trim() || 'منتج حصري متاح للحجز المسبق لفترة محدودة.',
       descriptionEn: descriptionEn.trim() || 'Exclusive pre-order item available for a limited time.',
-      images: [imageUrl.trim() || sampleImages[0]],
+      images: images.length > 0 ? images : [sampleImages[0]],
       featuresAr: featuresList.length > 0 ? featuresList : ['ضمان شامل لمدة عام', 'مقدم بسيط والباقي عند الاستلام من الفرع'],
       featuresEn: featuresList.length > 0 ? featuresList : ['1-Year Comprehensive Warranty', 'Small deposit, rest paid at branch pickup'],
       createdAt: productToEdit ? productToEdit.createdAt : new Date().toISOString(),
@@ -361,64 +385,91 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             )}
           </div>
 
-          {/* Image selection */}
+          {/* Product images (up to 8) — the first one is the main photo */}
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">
-              {t.imageUrlLabel}
-            </label>
-            <input
-              type="text"
-              value={imageUrl.startsWith('data:') ? '(صورة مرفوعة من الجهاز)' : imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://images.unsplash.com/..."
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs font-mono"
-            />
-            <label className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-700 text-white text-xs font-bold cursor-pointer hover:bg-brand-800">
-              <span>📷 ارفع صورة من جهازك</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const img = new Image();
-                    img.onload = () => {
-                      const max = 1000;
-                      const scale = Math.min(1, max / Math.max(img.width, img.height));
-                      const canvas = document.createElement('canvas');
-                      canvas.width = Math.round(img.width * scale);
-                      canvas.height = Math.round(img.height * scale);
-                      canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-                      setImageUrl(canvas.toDataURL('image/jpeg', 0.82));
-                    };
-                    img.src = reader.result as string;
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-            </label>
-            {imageUrl.startsWith('data:') && (
-              <img src={imageUrl} alt="" className="mt-2 w-24 h-24 rounded-xl object-cover border border-stone-200" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-stone-700">صور المنتج</label>
+              <span className="text-[10px] font-bold text-stone-500">{images.length} / {MAX_IMAGES}</span>
+            </div>
+
+            {images.length > 0 ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {images.map((img, i) => (
+                  <div key={img.slice(-40) + i} className={`relative aspect-square rounded-xl overflow-hidden border-2 bg-stone-100 ${i === 0 ? 'border-brand-600' : 'border-stone-200'}`}>
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && (
+                      <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-brand-700 text-white text-[9px] font-bold">الرئيسية</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 text-white flex items-center justify-center"
+                      title="حذف الصورة"
+                      aria-label="حذف الصورة"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="absolute bottom-0 inset-x-0 flex items-center justify-between gap-1 p-1 bg-gradient-to-t from-black/60 to-transparent">
+                      <button type="button" disabled={i === 0} onClick={() => moveImage(i, -1)} className="w-6 h-6 rounded-md bg-white/85 text-stone-800 text-xs font-black disabled:opacity-30" title="قدّم">›</button>
+                      {i !== 0 && (
+                        <button type="button" onClick={() => makeMain(i)} className="px-1.5 h-6 rounded-md bg-white/90 text-brand-800 text-[9px] font-bold" title="خليها الصورة الرئيسية">رئيسية</button>
+                      )}
+                      <button type="button" disabled={i === images.length - 1} onClick={() => moveImage(i, 1)} className="w-6 h-6 rounded-md bg-white/85 text-stone-800 text-xs font-black disabled:opacity-30" title="أخّر">‹</button>
+                    </div>
+                  </div>
+                ))}
+                {images.length < MAX_IMAGES && (
+                  <label className="aspect-square rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-50 flex flex-col items-center justify-center gap-1 cursor-pointer text-brand-700">
+                    <Plus className="w-5 h-5" />
+                    <span className="text-[10px] font-bold">{imageBusy ? 'جاري التجهيز…' : 'زوّد صور'}</span>
+                    <input type="file" accept="image/*" multiple className="hidden" disabled={imageBusy}
+                      onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+                  </label>
+                )}
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-1.5 p-5 rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-50 cursor-pointer text-brand-700">
+                <ImageIcon className="w-7 h-7" />
+                <span className="text-xs font-bold">{imageBusy ? 'جاري تجهيز الصور…' : '📷 ارفع صور المنتج من جهازك'}</span>
+                <span className="text-[10px] text-stone-500">تقدر تختار لحد {MAX_IMAGES} صور مرة واحدة — أول صورة هي اللي بتظهر في الكارت</span>
+                <input type="file" accept="image/*" multiple className="hidden" disabled={imageBusy}
+                  onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+              </label>
             )}
-            {/* Quick preset selector */}
-            <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-[10px] text-stone-400 shrink-0">معرض صور سريع:</span>
-              {sampleImages.map((img, i) => (
+
+            {/* Add by link */}
+            {images.length < MAX_IMAGES && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  placeholder="أو حط لينك صورة https://..."
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-stone-300 text-xs font-mono"
+                  dir="ltr"
+                />
                 <button
                   type="button"
-                  key={i}
-                  onClick={() => setImageUrl(img)}
-                  className={`w-10 h-10 rounded-lg overflow-hidden border shrink-0 ${
-                    imageUrl === img ? 'ring-2 ring-brand-500 border-brand-500' : 'border-stone-200'
-                  }`}
+                  disabled={!/^https?:\/\//.test(imageUrlInput.trim())}
+                  onClick={() => { addImages([imageUrlInput.trim()]); setImageUrlInput(''); }}
+                  className="px-3 py-2 rounded-xl bg-brand-700 text-white text-xs font-bold disabled:opacity-40 shrink-0"
                 >
-                  <img src={img} alt="Preset" className="w-full h-full object-cover" />
+                  إضافة
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {images.length === 0 && (
+              <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="text-[10px] text-stone-400 shrink-0">أو صورة تجريبية:</span>
+                {sampleImages.map((img, i) => (
+                  <button type="button" key={i} onClick={() => addImages([img])}
+                    className="w-10 h-10 rounded-lg overflow-hidden border border-stone-200 shrink-0">
+                    <img src={img} alt="Preset" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Description */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   Check, 
@@ -10,7 +10,9 @@ import {
   ArrowRight, 
   ArrowLeft,
   Truck,
-  RotateCcw
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Product, Language, MerchantSettings } from '../types';
 import { BranchesCard } from './BranchesCard';
@@ -40,9 +42,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   merchantSettings,
 }) => {
   const [selectedImg, setSelectedImg] = useState(0);
+  const touchX = useRef<number | null>(null);
   const now = useNow(1000);
   useEscapeKey(onClose, isOpen);
+  useEffect(() => { setSelectedImg(0); }, [product?.id, isOpen]);
   if (!isOpen || !product) return null;
+  const imgCount = product.images.length;
+  const stepImg = (d: number) => setSelectedImg(i => (i + d + imgCount) % Math.max(1, imgCount));
 
   const t = translations[language];
   const bookingWindow = getBookingWindow(product, now);
@@ -80,12 +86,36 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             
             {/* Gallery Section */}
             <div className="space-y-3">
-              <div className="aspect-[16/10] sm:aspect-[4/3] max-w-full rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 shadow-inner">
+              <div
+                className="relative aspect-[16/10] sm:aspect-[4/3] max-w-full rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 shadow-inner select-none"
+                onTouchStart={(e) => { touchX.current = e.touches[0].clientX; }}
+                onTouchEnd={(e) => {
+                  if (touchX.current === null) return;
+                  const dx = e.changedTouches[0].clientX - touchX.current; touchX.current = null;
+                  if (Math.abs(dx) > 40) stepImg(dx > 0 ? 1 : -1); // RTL: swipe right = next
+                }}
+              >
                 <img
                   src={product.images[selectedImg] || product.images[0]}
                   alt="Product view"
                   className="w-full h-full object-cover"
+                  draggable={false}
                 />
+                {product.images.length > 1 && (
+                  <>
+                    <button type="button" onClick={() => stepImg(-1)} aria-label="الصورة اللي قبلها"
+                      className="absolute top-1/2 -translate-y-1/2 right-2 w-9 h-9 rounded-full bg-white/85 hover:bg-white text-stone-900 shadow flex items-center justify-center">
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <button type="button" onClick={() => stepImg(1)} aria-label="الصورة اللي بعدها"
+                      className="absolute top-1/2 -translate-y-1/2 left-2 w-9 h-9 rounded-full bg-white/85 hover:bg-white text-stone-900 shadow flex items-center justify-center">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/55 text-white text-[10px] font-bold">
+                      {selectedImg + 1}/{product.images.length}
+                    </span>
+                  </>
+                )}
               </div>
 
               {product.images.length > 1 && (
@@ -229,7 +259,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               className={`flex-1 sm:flex-none justify-center px-4 sm:px-6 py-3 sm:py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md ${
                 isClosed
                   ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                  : 'bg-brand-700 hover:bg-brand-800 text-brand-300 hover:text-brand-200'
+                  : 'bg-brand-700 hover:bg-brand-800 text-white hover:text-white'
               }`}
             >
               <span>{bookingWindow.state === 'ended' ? (language === 'ar' ? 'انتهى وقت الحجز' : 'Booking ended') : bookingWindow.state === 'not_started' ? (language === 'ar' ? 'الحجز لسه مبدأش' : 'Not open yet') : isClosed ? t.statusClosed : t.reserveNow}</span>

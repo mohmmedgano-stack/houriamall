@@ -211,7 +211,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
           description: language === 'ar'
             ? 'تم استلام المنتج من الفرع وسداد الباقي. نشكرك لثقتك بنا!'
             : 'Picked up at the branch and remaining amount paid. Thank you!',
-          badgeClass: 'bg-brand-700 text-brand-300 border-brand-800',
+          badgeClass: 'bg-brand-700 text-white border-brand-800',
           dotClass: 'bg-brand-400',
         };
       case 'cancelled':
@@ -324,7 +324,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                     key={r.code}
                     type="button"
                     onClick={() => setActiveReservation(r)}
-                    className={`font-mono font-bold px-2 py-0.5 rounded border transition-colors ${activeReservation?.code === r.code ? 'bg-brand-700 text-brand-300 border-stone-900' : 'text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-300/80'}`}
+                    className={`font-mono font-bold px-2 py-0.5 rounded border transition-colors ${activeReservation?.code === r.code ? 'bg-brand-700 text-white border-brand-800' : 'text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-300/80'}`}
                   >
                     {r.code}
                   </button>
