@@ -453,7 +453,7 @@ case 'backfill':
       const csrf=<?= json_encode(csrf()) ?>, id=<?= (int)$rule['id'] ?>;
       const t={done:0,dup:0,nomatch:0,fail:0}; let after=null, running=false, seen=0, batches=0;
       const $=i=>document.getElementById(i), go=$('go'), stop=$('stop'), st=$('status');
-      function paint(){for(const k in t)$('s_'+k).textContent=t[k];$('bar').style.width=Math.min(95,5+batches*4)+'%';}
+      function paint(){for(const k in t)$('s_'+k).textContent=t[k];$('bar').style.width=Math.min(95,5+batches*1)+'%';}
       async function step(){
         if(!running) return;
         const fd=new FormData(); fd.append('a','backfill_step'); fd.append('csrf',csrf); fd.append('id',id); if(after) fd.append('after',after);
