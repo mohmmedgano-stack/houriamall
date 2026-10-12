@@ -62,7 +62,8 @@ foreach ($data['entry'] ?? [] as $entry) {
                 $page, $postId, $commentId,
                 (string)($v['from']['name'] ?? ''),
                 (string)($v['message'] ?? ''),
-                isset($v['created_time']) ? (int)$v['created_time'] : null
+                isset($v['created_time']) ? (int)$v['created_time'] : null,
+                $fromId
             );
         } catch (Throwable $e) {
             error_log('[autoreply] ' . $e->getMessage());

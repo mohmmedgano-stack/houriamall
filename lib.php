@@ -27,6 +27,9 @@ function db(): PDO {
         from_name TEXT, message TEXT, comment_status TEXT, dm_status TEXT,
         error TEXT, created_at TEXT)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS log_page ON log(page_id, created_at)");
+    $cols = array_column($pdo->query('PRAGMA table_info(rules)')->fetchAll(), 'name');
+    if (!in_array('mention_user', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN mention_user INTEGER DEFAULT 0");
+    if (!in_array('fallback_replies', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN fallback_replies TEXT");
     return $pdo;
 }
 
@@ -233,7 +236,7 @@ function find_rule(string $pageId, string $postId, string $message): ?array {
  * Reply to one comment according to the matching rule. Idempotent per comment_id.
  * Returns ['status' => no_rule|duplicate|done, ...]
  */
-function process_comment(array $page, string $postId, string $commentId, string $fromName, string $message, ?int $createdTs = null): array {
+function process_comment(array $page, string $postId, string $commentId, string $fromName, string $message, ?int $createdTs = null, string $fromId = ''): array {
     $rule = find_rule($page['id'], $postId, $message);
     if (!$rule) return ['status' => 'no_rule'];
 
@@ -256,9 +259,21 @@ function process_comment(array $page, string $postId, string $commentId, string 
         }
     }
 
-    if ((int)$rule['send_comment'] === 1 && ($txt = pick($rule['comment_replies']))) {
-        $r = graph('POST', $commentId . '/comments', ['message' => personalize($txt, $fromName)], $page['token']);
-        if ($e = gerr($r)) { $cs = 'failed'; $errors[] = 'كومنت: ' . $e; } else { $cs = 'sent'; }
+    // DM couldn't be delivered (messages closed / expired) → use the fallback public reply if one is set
+    $dmFailed = in_array($ds, ['failed', 'expired'], true);
+    $fallback = $dmFailed ? pick($rule['fallback_replies'] ?? '') : null;
+    $txt = $fallback ?: (((int)$rule['send_comment'] === 1) ? pick($rule['comment_replies']) : null);
+
+    if ($txt) {
+        $body = personalize($txt, $fromName);
+        $withMention = (int)($rule['mention_user'] ?? 0) === 1 && $fromId !== '';
+        $r = graph('POST', $commentId . '/comments', ['message' => ($withMention ? '@[' . $fromId . '] ' : '') . $body], $page['token']);
+        if ($withMention && gerr($r)) {
+            // mention rejected by Meta → retry without it so the customer still gets an answer
+            $r = graph('POST', $commentId . '/comments', ['message' => $body], $page['token']);
+        }
+        if ($e = gerr($r)) { $cs = 'failed'; $errors[] = 'كومنت: ' . $e; }
+        else { $cs = $fallback ? 'fallback' : 'sent'; }
     }
 
     db()->prepare('UPDATE log SET comment_status = ?, dm_status = ?, error = ? WHERE comment_id = ?')

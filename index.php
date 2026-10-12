@@ -79,7 +79,7 @@ document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('s
 <?php }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري']];
+    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
 }
@@ -218,6 +218,7 @@ if ($a) {
             $kw = trim((string)($_POST['keywords'] ?? ''));
             $sc = isset($_POST['send_comment']) ? 1 : 0; $sd = isset($_POST['send_dm']) ? 1 : 0;
             $cr = trim((string)($_POST['comment_replies'] ?? '')); $dm = trim((string)($_POST['dm_messages'] ?? ''));
+            $fb = trim((string)($_POST['fallback_replies'] ?? '')); $mu = isset($_POST['mention_user']) ? 1 : 0;
             $err = null;
             if ($mode === 'keywords' && !keywords_of($kw)) $err = 'اكتب كلمة واحدة على الأقل';
             elseif (!$sc && !$sd) $err = 'لازم تختار رد كومنت أو رسالة خاصة أو الاتنين';
@@ -225,12 +226,12 @@ if ($a) {
             elseif ($sd && !variants($dm)) $err = 'اكتب نص الرسالة الخاصة';
             if ($err) { $_SESSION['rule_draft'] = $_POST; flash($err, 'err'); redirect('?p=rule&page=' . urlencode($pageId) . ($id ? '&id=' . $id : '')); }
             $name = trim((string)($_POST['name'] ?? '')) ?: ($postLabel ?: 'كل البوستات');
-            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm];
+            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu];
             if ($id) {
-                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=? WHERE id=? AND page_id=?')
+                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=? WHERE id=? AND page_id=?')
                     ->execute(array_merge($vals, [$id, $pageId]));
             } else {
-                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute(array_merge($vals, [$pageId, now()]));
             }
             flash('اتحفظت القاعدة ✅' . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
@@ -261,7 +262,7 @@ if ($a) {
                 if ($e = gerr($res)) { $fetchErr = $e; break; }
                 foreach ($res['data'] ?? [] as $c) {
                     if (($c['from']['id'] ?? '') === $pg['id']) continue;
-                    $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''), isset($c['created_time']) ? strtotime($c['created_time']) : null);
+                    $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''), isset($c['created_time']) ? strtotime($c['created_time']) : null, (string)($c['from']['id'] ?? ''));
                     if ($out['status'] === 'duplicate') $stats['dup']++;
                     elseif ($out['status'] === 'no_rule') $stats['nomatch']++;
                     elseif (!empty($out['errors'])) $stats['fail']++;
@@ -380,6 +381,8 @@ case 'page':
             🔎 <?= $r['match_mode'] === 'keywords' ? 'كلمات: ' . h(implode('، ', keywords_of($r['keywords']))) : 'أي كومنت' ?> ·
             <?= (int)$r['send_comment'] === 1 ? '💬 رد كومنت (' . count(variants($r['comment_replies'])) . ' صيغة)' : '' ?>
             <?= (int)$r['send_dm'] === 1 ? ' ✉️ رسالة خاصة (' . count(variants($r['dm_messages'])) . ' صيغة)' : '' ?>
+            <?= (int)($r['mention_user'] ?? 0) === 1 ? ' 🏷️ منشن' : '' ?>
+            <?= variants($r['fallback_replies'] ?? '') ? ' 🔁 رد بديل' : '' ?>
           </div>
         </div>
       <?php endforeach; ?>
@@ -398,13 +401,13 @@ case 'rule':
     $pg = get_page((string)($_GET['page'] ?? ''));
     if (!$pg) redirect('?');
     $id = (int)($_GET['id'] ?? 0);
-    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => ''];
+    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0];
     if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = $st->fetch() ?: $r; }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
-        foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
+        foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
         $r['post_id'] = ($draft['scope'] ?? 'post') === 'post' ? (($draft['post_manual'] ?? '') ?: ($draft['post_id'] ?? '')) : '';
-        $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0;
+        $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0;
     }
     $scopeAll = $id && !$r['post_id'];
 
@@ -462,6 +465,10 @@ case 'rule':
         <textarea name="comment_replies" placeholder="تم إرسال التفاصيل في الرسائل يا {name} ❤️&#10;---&#10;بعتنالك كل التفاصيل على الخاص 🙏"><?= h($r['comment_replies']) ?></textarea>
         <label class="opt" style="margin-top:14px"><input type="checkbox" name="send_dm" <?= (int)$r['send_dm'] === 1 ? 'checked' : '' ?>><div><strong>✉️ رسالة خاصة على الماسنجر</strong><div class="muted">بتتبعت مرة واحدة لكل كومنت، وفي خلال 7 أيام من الكومنت</div></div></label>
         <textarea name="dm_messages" placeholder="أهلاً {name} 👋&#10;السعر ... والتوصيل ...&#10;للحجز ابعت رقم موبايلك"><?= h($r['dm_messages']) ?></textarea>
+        <label class="opt" style="margin-top:14px"><input type="checkbox" name="mention_user" <?= (int)($r['mention_user'] ?? 0) === 1 ? 'checked' : '' ?>><div><strong>🏷️ اعمل منشن لصاحب الكومنت في الرد</strong><div class="muted">لو فيسبوك رفض المنشن، الرد بيتبعت من غيره</div></div></label>
+        <label class="f">🔁 رد بديل لو الرسالة الخاصة موصلتش (اختياري)</label>
+        <textarea name="fallback_replies" placeholder="السعر 1500 جنيه ✅ والتوصيل لكل المحافظات 🚚&#10;---&#10;أهلاً {name}، السعر 1500 جنيه وللطلب كلمنا على 01xxxxxxxxx"><?= h($r['fallback_replies'] ?? '') ?></textarea>
+        <p class="muted">لو الشخص قافل الرسايل أو الرسالة فشلت، الأداة هتكتب الرد ده في الكومنت بدل الرد العادي. سيبه فاضي لو مش عايزه.</p>
         <p class="muted">💡 تقدر تكتب أكتر من صيغة وتفصل بينهم بسطر فيه <code>---</code> لوحده، والأداة هتختار واحدة عشوائي كل مرة عشان فيسبوك ما يعتبرهاش سبام. واكتب <code>{name}</code> عشان يتحط اسم صاحب الكومنت.</p>
       </div>
 
