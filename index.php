@@ -79,7 +79,7 @@ document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('s
 <?php }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'already' => ['off', 'مترد عليه قبل كده']];
+    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'already' => ['off', 'مترد عليه قبل كده'], 'retry' => ['warn', 'هيتعاد لوحده']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
 }
@@ -312,6 +312,9 @@ case 'settings':
         <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="subscribe_app"><button class="btn sec sm" <?= $appReady ? '' : 'disabled' ?>>إعادة الربط</button></form>
       </div>
       <p class="muted" style="margin-top:8px">آخر إشارة وصلت من فيسبوك: <?= h(fmt_time(setting('last_webhook'))) ?></p>
+      <?php $ws = setting('worker_seen'); $wok = $ws && (time() - strtotime($ws . ' UTC')) < 180; ?>
+      <p class="muted">المهمة المجدولة (إعادة المحاولة والرد على القديم): <?= $wok ? '<span class="badge ok">شغالة</span>' : '<span class="badge bad">واقفة</span>' ?> · آخر تشغيل <?= h(fmt_time($ws)) ?></p>
+      <?php if (setting('token_problem')): ?><p class="flash err">صلاحية الربط بفيسبوك انتهت — دوس "تحديث / إضافة صفحات" من صفحة الصفحات عشان تتجدد.</p><?php endif; ?>
     </div>
     <div class="card">
       <h2>تغيير باسورد اللوحة</h2>
@@ -442,7 +445,7 @@ case 'backfill':
         if(!job){ $('state').textContent='لسه ما بدأش'; $('go').style.display=''; $('go').textContent='ابدأ'; $('pause').style.display='none'; $('restart').style.display='none'; return; }
         for(const k of ['seen','done','dup','nomatch','fail']) $('s_'+k).textContent=job[k]||0;
         $('state').textContent=labels[job.status]||job.status;
-        $('err').textContent = job.status==='error' ? (job.error||'') : '';
+        $('err').textContent = job.error||'';
         const running = job.status==='running';
         $('pause').style.display = running ? '' : 'none';
         $('go').style.display = running ? 'none' : '';
@@ -572,6 +575,7 @@ default:
     </div>
     <?php endif; ?>
 
+    <?php if (setting('token_problem')): ?><div class="flash err">⚠️ صلاحية الربط بفيسبوك انتهت (ده بيحصل لو غيرت باسورد فيسبوك مثلاً). دوس "تحديث / إضافة صفحات" عشان ترجع تشتغل.</div><?php endif; ?>
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <h1 style="margin:0">صفحاتك</h1>
       <a class="btn <?= $appReady ? '' : 'sec' ?>" href="<?= $appReady ? 'oauth.php' : '?p=settings' ?>">🔗 <?= $hasPages ? 'تحديث / إضافة صفحات' : 'ربط صفحات فيسبوك' ?></a>

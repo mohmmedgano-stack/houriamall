@@ -34,6 +34,15 @@ function db(): PDO {
     $cols = array_column($pdo->query('PRAGMA table_info(rules)')->fetchAll(), 'name');
     if (!in_array('mention_user', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN mention_user INTEGER DEFAULT 0");
     if (!in_array('fallback_replies', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN fallback_replies TEXT");
+    $lcols = array_column($pdo->query('PRAGMA table_info(log)')->fetchAll(), 'name');
+    foreach (['from_id' => 'TEXT', 'comment_ts' => 'INTEGER', 'attempts' => 'INTEGER DEFAULT 0', 'next_retry' => 'TEXT'] as $c => $t) {
+        if (!in_array($c, $lcols, true)) $pdo->exec("ALTER TABLE log ADD COLUMN $c $t");
+    }
+    $jcols = array_column($pdo->query('PRAGMA table_info(jobs)')->fetchAll(), 'name');
+    foreach (['fail_streak' => 'INTEGER DEFAULT 0', 'next_run' => 'TEXT'] as $c => $t) {
+        if (!in_array($c, $jcols, true)) $pdo->exec("ALTER TABLE jobs ADD COLUMN $c $t");
+    }
+    $pdo->exec("CREATE INDEX IF NOT EXISTS log_retry ON log(next_retry)");
     return $pdo;
 }
 
@@ -171,6 +180,7 @@ function import_pages(string $userToken): array {
     foreach (db()->query('SELECT * FROM pages WHERE active = 1')->fetchAll() as $pg) {
         graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => 'feed'], $pg['token']);
     }
+    set_setting('token_problem', '');
     return ['count' => $count];
 }
 
@@ -236,6 +246,45 @@ function find_rule(string $pageId, string $postId, string $message): ?array {
     return null;
 }
 
+const MAX_ATTEMPTS = 6;
+
+/**
+ * How long to wait before retrying a failed Graph call, or null when the error is permanent
+ * (e.g. the person can't receive messages, the comment was deleted, missing permission).
+ */
+function retry_delay(array $r, int $attempt = 1): ?int {
+    $e = $r['error'] ?? null;
+    if (!$e) return null;
+    $code = (int)($e['code'] ?? 0);
+    $grow = min(8, 2 ** max(0, $attempt - 1));            // 1,2,4,8 × base
+    if ($code === 0) return 60 * $grow;                     // network error / bad response from Meta
+    if (in_array($code, [4, 17, 32, 613, 80001, 80006], true)) return 600 * $grow; // rate limits
+    if ($code === 368) return 3600;                         // temporarily blocked → wait an hour
+    if ($code === 190) { refresh_page_tokens(); return 300; } // token expired → refresh and retry
+    if (in_array($code, [1, 2], true) || !empty($e['is_transient'])) return 60 * $grow;
+    return null;
+}
+
+/** Re-fetch every page token with the saved long-lived user token (self-heal for expired page tokens). */
+function refresh_page_tokens(): void {
+    $last = (int)setting('tokens_refreshed', '0');
+    if (time() - $last < 1800) return;
+    set_setting('tokens_refreshed', (string)time());
+    $user = setting('user_token');
+    if (!$user) return;
+    $after = null; $guard = 0;
+    $up = db()->prepare('UPDATE pages SET token = ?, updated_at = ? WHERE id = ?');
+    do {
+        $params = ['fields' => 'id,access_token', 'limit' => 100];
+        if ($after) $params['after'] = $after;
+        $res = graph('GET', 'me/accounts', $params, $user);
+        if (gerr($res)) { set_setting('token_problem', now()); return; }
+        foreach ($res['data'] ?? [] as $pg) if (!empty($pg['access_token'])) $up->execute([$pg['access_token'], now(), (string)$pg['id']]);
+        $after = $res['paging']['cursors']['after'] ?? null;
+    } while (isset($res['paging']['next']) && $after && ++$guard < 20);
+    set_setting('token_problem', '');
+}
+
 /**
  * Reply to one comment according to the matching rule. Idempotent per comment_id.
  * Returns ['status' => no_rule|duplicate|done, ...]
@@ -244,48 +293,144 @@ function process_comment(array $page, string $postId, string $commentId, string 
     $rule = find_rule($page['id'], $postId, $message);
     if (!$rule) return ['status' => 'no_rule'];
 
-    $ins = db()->prepare("INSERT OR IGNORE INTO log (comment_id, page_id, post_id, rule_id, from_name, message, comment_status, dm_status, error, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', 'pending', '', ?)");
-    $ins->execute([$commentId, $page['id'], $postId, (int)$rule['id'], $fromName, mb_substr($message, 0, 500), now()]);
+    $ins = db()->prepare("INSERT OR IGNORE INTO log (comment_id, page_id, post_id, rule_id, from_name, message, comment_status, dm_status, error, created_at, from_id, comment_ts, attempts)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', 'pending', '', ?, ?, ?, 0)");
+    $ins->execute([$commentId, $page['id'], $postId, (int)$rule['id'], $fromName, mb_substr($message, 0, 500), now(), $fromId, $createdTs]);
     if ($ins->rowCount() === 0) return ['status' => 'duplicate'];
 
-    $errors = []; $cs = 'skipped'; $ds = 'skipped';
+    $st = db()->prepare('SELECT * FROM log WHERE comment_id = ?'); $st->execute([$commentId]);
+    return deliver($page, $rule, $st->fetch());
+}
 
-    if ((int)$rule['send_dm'] === 1 && ($txt = pick($rule['dm_messages']))) {
-        if ($createdTs && (time() - $createdTs) > (7 * 86400 - 600)) {
-            $ds = 'expired';
-        } else {
+/**
+ * Do (or finish) the replies for one logged comment. Safe to call again: it only redoes the parts
+ * that are still 'pending' or 'retry'. Temporary errors schedule a retry instead of failing.
+ */
+function deliver(array $page, array $rule, array $row): array {
+    $commentId = (string)$row['comment_id'];
+    $fromName  = (string)$row['from_name'];
+    $fromId    = (string)($row['from_id'] ?? '');
+    $ts        = $row['comment_ts'] ? (int)$row['comment_ts'] : null;
+    $attempt   = (int)($row['attempts'] ?? 0) + 1;
+    $ds = (string)$row['dm_status']; $cs = (string)$row['comment_status'];
+    $errors = []; $wait = null;
+
+    // 1) private reply
+    if (in_array($ds, ['pending', 'retry'], true)) {
+        $txt = ((int)$rule['send_dm'] === 1) ? pick($rule['dm_messages']) : null;
+        if (!$txt) $ds = 'skipped';
+        elseif ($ts && (time() - $ts) > (7 * 86400 - 600)) $ds = 'expired';
+        else {
             $r = graph('POST', $page['id'] . '/messages', [
                 'recipient' => json_encode(['comment_id' => $commentId]),
                 'message'   => json_encode(['text' => personalize($txt, $fromName)], JSON_UNESCAPED_UNICODE),
             ], $page['token']);
-            if ($e = gerr($r)) { $ds = 'failed'; $errors[] = 'رسالة: ' . $e; } else { $ds = 'sent'; }
+            if (!gerr($r)) $ds = 'sent';
+            else {
+                $d = $attempt < MAX_ATTEMPTS ? retry_delay($r, $attempt) : null;
+                if ($d !== null) { $ds = 'retry'; $wait = $d; } else $ds = 'failed';
+                $errors[] = 'رسالة: ' . gerr($r);
+            }
         }
     }
 
-    // DM couldn't be delivered (messages closed / expired) → use the fallback public reply if one is set
-    $dmFailed = in_array($ds, ['failed', 'expired'], true);
-    $fallback = $dmFailed ? pick($rule['fallback_replies'] ?? '') : null;
-    $txt = $fallback ?: (((int)$rule['send_comment'] === 1) ? pick($rule['comment_replies']) : null);
-
-    if ($txt) {
-        $body = personalize($txt, $fromName);
-        $withMention = (int)($rule['mention_user'] ?? 0) === 1 && $fromId !== '';
-        $r = graph('POST', $commentId . '/comments', ['message' => ($withMention ? '@[' . $fromId . '] ' : '') . $body], $page['token']);
-        if ($withMention && gerr($r)) {
-            // mention rejected by Meta → retry without it so the customer still gets an answer
-            $r = graph('POST', $commentId . '/comments', ['message' => $body], $page['token']);
+    // 2) public reply — waits while the DM is still being retried, so we know if the fallback is needed
+    if ($ds !== 'retry' && in_array($cs, ['pending', 'retry'], true)) {
+        $fallback = in_array($ds, ['failed', 'expired'], true) ? pick($rule['fallback_replies'] ?? '') : null;
+        $txt = $fallback ?: (((int)$rule['send_comment'] === 1) ? pick($rule['comment_replies']) : null);
+        if (!$txt) $cs = 'skipped';
+        else {
+            $body = personalize($txt, $fromName);
+            $withMention = (int)($rule['mention_user'] ?? 0) === 1 && $fromId !== '';
+            $r = graph('POST', $commentId . '/comments', ['message' => ($withMention ? '@[' . $fromId . '] ' : '') . $body], $page['token']);
+            if ($withMention && gerr($r) && retry_delay($r, 1) === null) {
+                // mention rejected → send without it so the customer still gets an answer
+                $r = graph('POST', $commentId . '/comments', ['message' => $body], $page['token']);
+            }
+            if (!gerr($r)) $cs = $fallback ? 'fallback' : 'sent';
+            else {
+                $d = $attempt < MAX_ATTEMPTS ? retry_delay($r, $attempt) : null;
+                if ($d !== null) { $cs = 'retry'; $wait = max($wait ?? 0, $d); } else $cs = 'failed';
+                $errors[] = 'كومنت: ' . gerr($r);
+            }
         }
-        if ($e = gerr($r)) { $cs = 'failed'; $errors[] = 'كومنت: ' . $e; }
-        else { $cs = $fallback ? 'fallback' : 'sent'; }
     }
 
-    db()->prepare('UPDATE log SET comment_status = ?, dm_status = ?, error = ? WHERE comment_id = ?')
-        ->execute([$cs, $ds, implode(' | ', $errors), $commentId]);
+    $next = $wait !== null ? gmdate('Y-m-d H:i:s', time() + $wait) : null;
+    db()->prepare('UPDATE log SET comment_status = ?, dm_status = ?, error = ?, attempts = ?, next_retry = ? WHERE comment_id = ?')
+        ->execute([$cs, $ds, implode(' | ', $errors), $attempt, $next, $commentId]);
 
-    return ['status' => 'done', 'comment' => $cs, 'dm' => $ds, 'errors' => $errors];
+    return ['status' => 'done', 'comment' => $cs, 'dm' => $ds, 'errors' => $errors, 'retry' => $next !== null];
 }
 
+/** Worker: finish replies that hit a temporary error, or got stuck half-way (e.g. server restart). */
+function retry_due(int $limit = 10): int {
+    $rows = db()->query("SELECT * FROM log WHERE
+        (next_retry IS NOT NULL AND next_retry <= datetime('now'))
+        OR ((dm_status = 'pending' OR comment_status = 'pending') AND next_retry IS NULL AND created_at < datetime('now', '-3 minutes'))
+        ORDER BY created_at DESC LIMIT " . (int)$limit)->fetchAll();
+    foreach ($rows as $row) {
+        $pg = get_page((string)$row['page_id']);
+        $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$row['rule_id']]);
+        $rule = $st->fetch();
+        if (!$pg || !$rule) {
+            db()->prepare("UPDATE log SET next_retry = NULL, comment_status = CASE WHEN comment_status IN ('pending','retry') THEN 'failed' ELSE comment_status END,
+                dm_status = CASE WHEN dm_status IN ('pending','retry') THEN 'failed' ELSE dm_status END, error = 'القاعدة أو الصفحة اتمسحت' WHERE comment_id = ?")
+                ->execute([$row['comment_id']]);
+            continue;
+        }
+        deliver($pg, $rule, $row);
+        usleep(400000);
+    }
+    return count($rows);
+}
+
+/** Handle one comment object fetched from the Graph API (used by old-comment jobs and the catch-up sweep). */
+function handle_fetched_comment(array $pg, string $postId, array $cm): string {
+    if ((string)($cm['from']['id'] ?? '') === $pg['id']) return 'skip';
+    foreach ($cm['comments']['data'] ?? [] as $rep) {
+        if ((string)($rep['from']['id'] ?? '') === $pg['id']) return 'dup';   // page already answered it by hand
+    }
+    $out = process_comment($pg, $postId, (string)$cm['id'], (string)($cm['from']['name'] ?? ''), (string)($cm['message'] ?? ''),
+        isset($cm['created_time']) ? strtotime($cm['created_time']) : null, (string)($cm['from']['id'] ?? ''));
+    if ($out['status'] === 'duplicate') return 'dup';
+    if ($out['status'] === 'no_rule') return 'nomatch';
+    if (($out['comment'] ?? '') === 'failed' && ($out['dm'] ?? '') !== 'sent') return 'fail';
+    return 'done';
+}
+
+const COMMENT_FIELDS = 'id,message,from{id,name},created_time,comments.limit(50){from{id}}';
+
+/**
+ * Catch-up sweep: picks up comments whose webhook never arrived (server down, Meta hiccup).
+ * Only looks at comments from the last 48h that were written after the rule was created.
+ */
+function sweep_missed(): void {
+    $pages = db()->query('SELECT * FROM pages WHERE active = 1')->fetchAll();
+    foreach ($pages as $pg) {
+        $rules = db()->prepare('SELECT * FROM rules WHERE page_id = ? AND active = 1'); $rules->execute([$pg['id']]);
+        $targets = [];   // post_id => earliest timestamp to consider
+        $pageWideSince = null;
+        foreach ($rules->fetchAll() as $r) {
+            $since = max(strtotime(($r['created_at'] ?: now()) . ' UTC'), time() - 48 * 3600);
+            if ($r['post_id']) $targets[$r['post_id']] = min($targets[$r['post_id']] ?? PHP_INT_MAX, $since);
+            else $pageWideSince = min($pageWideSince ?? PHP_INT_MAX, $since);
+        }
+        if ($pageWideSince !== null) {
+            $res = graph('GET', $pg['id'] . '/posts', ['fields' => 'id', 'limit' => 5], $pg['token']);
+            if (($res['error']['code'] ?? 0) == 190) refresh_page_tokens();
+            foreach ($res['data'] ?? [] as $p) $targets[$p['id']] = min($targets[$p['id']] ?? PHP_INT_MAX, $pageWideSince);
+        }
+        foreach ($targets as $postId => $since) {
+            $res = graph('GET', $postId . '/comments', ['filter' => 'toplevel', 'order' => 'reverse_chronological', 'limit' => 25, 'fields' => COMMENT_FIELDS], $pg['token']);
+            if (gerr($res)) { if (($res['error']['code'] ?? 0) == 190) refresh_page_tokens(); continue; }
+            foreach ($res['data'] ?? [] as $cm) {
+                if (isset($cm['created_time']) && strtotime($cm['created_time']) < $since) break;   // newest first → stop at old ones
+                handle_fetched_comment($pg, (string)$postId, $cm);
+            }
+        }
+    }
+}
 
 /* ---------------- Background backfill jobs (run by worker.php from cron) ---------------- */
 const BACKFILL_BATCH = 2;
@@ -296,7 +441,7 @@ function job_for_rule(int $ruleId): ?array {
     return $st->fetch() ?: null;
 }
 
-/** Process one small batch of a job. Returns the updated job row. */
+/** Process one small batch of a job. Temporary errors pause it briefly and it carries on by itself. */
 function run_job_batch(array $job): array {
     $upd = function (array $f) use (&$job) {
         $f['updated_at'] = now();
@@ -309,24 +454,22 @@ function run_job_batch(array $job): array {
     $pg = $rule ? get_page($rule['page_id']) : null;
     if (!$rule || !$pg || !$rule['post_id']) { $upd(['status' => 'error', 'error' => 'القاعدة أو الصفحة مش موجودة']); return $job; }
 
-    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time,comments.limit(50){from{id}}', 'order' => 'reverse_chronological', 'limit' => BACKFILL_BATCH];
+    $params = ['filter' => 'toplevel', 'fields' => COMMENT_FIELDS, 'order' => 'reverse_chronological', 'limit' => BACKFILL_BATCH];
     if (!empty($job['after_cursor'])) $params['after'] = $job['after_cursor'];
     $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
-    if ($e = gerr($res)) { $upd(['status' => 'error', 'error' => $e]); return $job; }
+    if ($e = gerr($res)) {
+        $streak = (int)($job['fail_streak'] ?? 0) + 1;
+        $d = retry_delay($res, $streak);
+        if ($d === null) { $upd(['status' => 'error', 'error' => $e]); return $job; }   // permanent problem → stop and show it
+        $upd(['next_run' => gmdate('Y-m-d H:i:s', time() + $d), 'fail_streak' => $streak,
+              'error' => 'مشكلة مؤقتة، هيكمل لوحده بعد ' . max(1, (int)round($d / 60)) . ' دقيقة: ' . $e]);
+        return $job;
+    }
 
     $c = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0];
     foreach ($res['data'] ?? [] as $cm) {
-        if (($cm['from']['id'] ?? '') === $pg['id']) continue;
-        // the page already answered this comment (manually or before the tool) → skip it
-        $pageReplied = false;
-        foreach ($cm['comments']['data'] ?? [] as $rep) { if (($rep['from']['id'] ?? '') === $pg['id']) { $pageReplied = true; break; } }
-        if ($pageReplied) { $c['dup']++; continue; }
-        $out = process_comment($pg, $rule['post_id'], (string)$cm['id'], (string)($cm['from']['name'] ?? ''), (string)($cm['message'] ?? ''),
-            isset($cm['created_time']) ? strtotime($cm['created_time']) : null, (string)($cm['from']['id'] ?? ''));
-        if ($out['status'] === 'duplicate') $c['dup']++;
-        elseif ($out['status'] === 'no_rule') $c['nomatch']++;
-        elseif (($out['comment'] ?? '') === 'failed' && !empty($out['errors'])) $c['fail']++;
-        else $c['done']++;
+        $k = handle_fetched_comment($pg, (string)$rule['post_id'], $cm);
+        if (isset($c[$k])) $c[$k]++;
     }
     $next = isset($res['paging']['next']) ? ($res['paging']['cursors']['after'] ?? null) : null;
 
@@ -336,7 +479,7 @@ function run_job_batch(array $job): array {
     if ($status === 'running') $status = $next === null ? 'done' : 'running';
 
     $upd([
-        'status' => $status, 'after_cursor' => $next,
+        'status' => $status, 'after_cursor' => $next, 'fail_streak' => 0, 'next_run' => null, 'error' => '',
         'seen' => (int)$job['seen'] + count($res['data'] ?? []),
         'done' => (int)$job['done'] + $c['done'], 'dup' => (int)$job['dup'] + $c['dup'],
         'nomatch' => (int)$job['nomatch'] + $c['nomatch'], 'fail' => (int)$job['fail'] + $c['fail'],

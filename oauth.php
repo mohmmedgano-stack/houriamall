@@ -41,5 +41,5 @@ if ($e = gerr($r)) { flash('فشل الربط: ' . $e, 'err'); redirect('index.p
 
 $res = import_pages((string)$r['access_token']);
 if (isset($res['error'])) flash('فشل جلب الصفحات: ' . $res['error'], 'err');
-else flash('تم ربط ' . $res['count'] . ' صفحة ✅ فعّل الصفحات اللي عايزها من تحت');
+else { set_setting('token_problem', ''); flash('تم ربط ' . $res['count'] . ' صفحة ✅ فعّل الصفحات اللي عايزها من تحت'); }
 redirect('index.php');
