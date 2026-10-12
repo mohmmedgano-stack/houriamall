@@ -65,6 +65,9 @@ function start_session(): void {
     session_set_cookie_params(['lifetime' => 60 * 60 * 24 * 14, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
     ini_set('session.gc_maxlifetime', (string)(60 * 60 * 24 * 14));
     session_start();
+    header('Cache-Control: no-store, no-cache, must-revalidate, private');
+    header('Pragma: no-cache');
+    header('X-LiteSpeed-Cache-Control: no-cache');
 }
 
 function require_login(): void {

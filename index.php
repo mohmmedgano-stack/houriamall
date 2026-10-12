@@ -251,12 +251,14 @@ if ($a) {
             $pg = $rule ? get_page($rule['page_id']) : null;
             if (!$rule || !$pg || !$rule['post_id']) redirect('?');
             @set_time_limit(300);
-            $stats = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0]; $after = null; $loops = 0;
+            ignore_user_abort(true);
+            session_write_close(); // don't lock the user's other pages while this runs
+            $stats = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0]; $after = null; $loops = 0; $fetchErr = null;
             do {
                 $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 50];
                 if ($after) $params['after'] = $after;
                 $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
-                if ($e = gerr($res)) { flash('فشل جلب الكومنتات: ' . $e, 'err'); break; }
+                if ($e = gerr($res)) { $fetchErr = $e; break; }
                 foreach ($res['data'] ?? [] as $c) {
                     if (($c['from']['id'] ?? '') === $pg['id']) continue;
                     $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''), isset($c['created_time']) ? strtotime($c['created_time']) : null);
@@ -268,6 +270,8 @@ if ($a) {
                 $after = $res['paging']['cursors']['after'] ?? null;
                 $next = isset($res['paging']['next']);
             } while ($next && $after && ++$loops < 6);
+            session_start();
+            if ($fetchErr) flash('فشل جلب الكومنتات: ' . $fetchErr, 'err');
             flash("الكومنتات القديمة: اترد على {$stats['done']} — كان مترد عليها {$stats['dup']} — مش مطابقة {$stats['nomatch']} — فيها مشكلة {$stats['fail']}");
             redirect('?p=page&id=' . urlencode($rule['page_id']));
     }
