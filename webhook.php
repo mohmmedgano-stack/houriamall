@@ -68,6 +68,7 @@ foreach ($data['entry'] ?? [] as $entry) {
                 $fromId
             );
         } catch (Throwable $e) {
+            // nothing is lost: the worker's catch-up sweep picks this comment up within ~10 minutes
             error_log('[autoreply] ' . $e->getMessage());
         }
     }

@@ -9,10 +9,12 @@ function db(): PDO {
     static $pdo = null;
     if ($pdo) return $pdo;
     if (!is_dir(DATA_DIR)) { @mkdir(DATA_DIR, 0750, true); }
-    $pdo = new PDO('sqlite:' . DATA_DIR . '/app.sqlite');
+    $pdo = new PDO('sqlite:' . DATA_DIR . '/app.sqlite', null, null, [PDO::ATTR_TIMEOUT => 30]);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-    $pdo->exec('PRAGMA busy_timeout = 5000');
+    // wait (instead of failing) when another process is writing, and let readers and writers work side by side
+    $pdo->exec('PRAGMA busy_timeout = 30000');
+    try { $pdo->exec('PRAGMA journal_mode = WAL'); $pdo->exec('PRAGMA synchronous = NORMAL'); } catch (Throwable $e) {}
     $pdo->exec("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS pages (
         id TEXT PRIMARY KEY, name TEXT, token TEXT, active INTEGER DEFAULT 0,
@@ -46,21 +48,41 @@ function db(): PDO {
     return $pdo;
 }
 
+/** Read one row / one value and release the read lock right away (keeps SQLite from reporting "database is locked"). */
+function fetch_one(PDOStatement $st) { $r = $st->fetch(); $st->closeCursor(); return $r; }
+function fetch_col(PDOStatement $st) { $v = $st->fetchColumn(); $st->closeCursor(); return $v; }
+
+/** Run a DB write, retrying for a while if another process holds the lock. */
+function db_run(string $sql, array $params = []): PDOStatement {
+    $tries = 0;
+    while (true) {
+        try {
+            $st = db()->prepare($sql);
+            $st->execute($params);
+            return $st;
+        } catch (PDOException $e) {
+            $locked = stripos($e->getMessage(), 'locked') !== false || stripos($e->getMessage(), 'busy') !== false;
+            if (!$locked || ++$tries >= 8) throw $e;
+            usleep(500000 * $tries);   // 0.5s, 1s, 1.5s … then try again
+        }
+    }
+}
+
 function setting(string $k, ?string $default = null): ?string {
     $st = db()->prepare('SELECT v FROM settings WHERE k = ?');
     $st->execute([$k]);
-    $v = $st->fetchColumn();
+    $v = fetch_col($st);
     return ($v === false || $v === null) ? $default : (string)$v;
 }
 
 function set_setting(string $k, ?string $v): void {
-    db()->prepare('INSERT OR REPLACE INTO settings (k, v) VALUES (?, ?)')->execute([$k, $v]);
+    db_run('INSERT OR REPLACE INTO settings (k, v) VALUES (?, ?)', [$k, $v]);
 }
 
 function get_page(string $id): ?array {
     $st = db()->prepare('SELECT * FROM pages WHERE id = ?');
     $st->execute([$id]);
-    $r = $st->fetch();
+    $r = fetch_one($st);
     return $r ?: null;
 }
 
@@ -293,13 +315,13 @@ function process_comment(array $page, string $postId, string $commentId, string 
     $rule = find_rule($page['id'], $postId, $message);
     if (!$rule) return ['status' => 'no_rule'];
 
-    $ins = db()->prepare("INSERT OR IGNORE INTO log (comment_id, page_id, post_id, rule_id, from_name, message, comment_status, dm_status, error, created_at, from_id, comment_ts, attempts)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', 'pending', '', ?, ?, ?, 0)");
-    $ins->execute([$commentId, $page['id'], $postId, (int)$rule['id'], $fromName, mb_substr($message, 0, 500), now(), $fromId, $createdTs]);
+    $ins = db_run("INSERT OR IGNORE INTO log (comment_id, page_id, post_id, rule_id, from_name, message, comment_status, dm_status, error, created_at, from_id, comment_ts, attempts)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', 'pending', '', ?, ?, ?, 0)",
+        [$commentId, $page['id'], $postId, (int)$rule['id'], $fromName, mb_substr($message, 0, 500), now(), $fromId, $createdTs]);
     if ($ins->rowCount() === 0) return ['status' => 'duplicate'];
 
     $st = db()->prepare('SELECT * FROM log WHERE comment_id = ?'); $st->execute([$commentId]);
-    return deliver($page, $rule, $st->fetch());
+    return deliver($page, $rule, fetch_one($st));
 }
 
 /**
@@ -357,8 +379,8 @@ function deliver(array $page, array $rule, array $row): array {
     }
 
     $next = $wait !== null ? gmdate('Y-m-d H:i:s', time() + $wait) : null;
-    db()->prepare('UPDATE log SET comment_status = ?, dm_status = ?, error = ?, attempts = ?, next_retry = ? WHERE comment_id = ?')
-        ->execute([$cs, $ds, implode(' | ', $errors), $attempt, $next, $commentId]);
+    db_run('UPDATE log SET comment_status = ?, dm_status = ?, error = ?, attempts = ?, next_retry = ? WHERE comment_id = ?',
+        [$cs, $ds, implode(' | ', $errors), $attempt, $next, $commentId]);
 
     return ['status' => 'done', 'comment' => $cs, 'dm' => $ds, 'errors' => $errors, 'retry' => $next !== null];
 }
@@ -372,7 +394,7 @@ function retry_due(int $limit = 10): int {
     foreach ($rows as $row) {
         $pg = get_page((string)$row['page_id']);
         $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$row['rule_id']]);
-        $rule = $st->fetch();
+        $rule = fetch_one($st);
         if (!$pg || !$rule) {
             db()->prepare("UPDATE log SET next_retry = NULL, comment_status = CASE WHEN comment_status IN ('pending','retry') THEN 'failed' ELSE comment_status END,
                 dm_status = CASE WHEN dm_status IN ('pending','retry') THEN 'failed' ELSE dm_status END, error = 'القاعدة أو الصفحة اتمسحت' WHERE comment_id = ?")
@@ -438,7 +460,7 @@ const BACKFILL_BATCH = 2;
 function job_for_rule(int $ruleId): ?array {
     $st = db()->prepare('SELECT * FROM jobs WHERE rule_id = ? ORDER BY id DESC LIMIT 1');
     $st->execute([$ruleId]);
-    return $st->fetch() ?: null;
+    return fetch_one($st) ?: null;
 }
 
 /** Process one small batch of a job. Temporary errors pause it briefly and it carries on by itself. */
@@ -446,11 +468,11 @@ function run_job_batch(array $job): array {
     $upd = function (array $f) use (&$job) {
         $f['updated_at'] = now();
         $sets = implode(', ', array_map(fn($k) => "$k = ?", array_keys($f)));
-        db()->prepare("UPDATE jobs SET $sets WHERE id = ?")->execute(array_merge(array_values($f), [$job['id']]));
+        db_run("UPDATE jobs SET $sets WHERE id = ?", array_merge(array_values($f), [$job['id']]));
         $job = array_merge($job, $f);
     };
     $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$job['rule_id']]);
-    $rule = $st->fetch();
+    $rule = fetch_one($st);
     $pg = $rule ? get_page($rule['page_id']) : null;
     if (!$rule || !$pg || !$rule['post_id']) { $upd(['status' => 'error', 'error' => 'القاعدة أو الصفحة مش موجودة']); return $job; }
 
@@ -475,7 +497,7 @@ function run_job_batch(array $job): array {
 
     // the user may have paused while we were working — don't override that
     $cur = db()->prepare('SELECT status FROM jobs WHERE id = ?'); $cur->execute([$job['id']]);
-    $status = (string)$cur->fetchColumn();
+    $status = (string)fetch_col($cur);
     if ($status === 'running') $status = $next === null ? 'done' : 'running';
 
     $upd([

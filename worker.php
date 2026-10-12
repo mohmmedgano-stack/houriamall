@@ -25,6 +25,12 @@ if (setting('last_prune', '') !== gmdate('Y-m-d')) {
     }, 'prune');
 }
 
+// self-heal: jobs that stopped because of a temporary problem (DB lock, network…) start again by themselves
+$safe(function () {
+    db_run("UPDATE jobs SET status = 'running', next_run = NULL, error = '' WHERE status = 'error'
+        AND (error LIKE '%locked%' OR error LIKE '%busy%' OR error LIKE '%Network%' OR error LIKE '%Bad response%' OR error LIKE '%timed out%' OR error LIKE '%#2)%' OR error LIKE '%#1)%')");
+}, 'resume');
+
 $deadline = time() + 50;
 
 $safe(fn() => retry_due(10), 'retry');

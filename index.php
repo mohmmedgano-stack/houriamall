@@ -163,11 +163,11 @@ if (in_array($a, ['job_start', 'job_pause', 'job_status'], true)) {
     header('Content-Type: application/json; charset=utf-8');
     $ruleId = (int)($_POST['id'] ?? 0);
     $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([$ruleId]);
-    if (!$st->fetch()) { echo json_encode(['error' => 'القاعدة مش موجودة'], JSON_UNESCAPED_UNICODE); exit; }
+    if (!fetch_one($st)) { echo json_encode(['error' => 'القاعدة مش موجودة'], JSON_UNESCAPED_UNICODE); exit; }
     $job = job_for_rule($ruleId);
     if ($a === 'job_start') {
         if ($job && in_array($job['status'], ['paused', 'error'], true)) {
-            db()->prepare("UPDATE jobs SET status = 'running', error = '', updated_at = ? WHERE id = ?")->execute([now(), $job['id']]);
+            db_run("UPDATE jobs SET status = 'running', error = '', next_run = NULL, fail_streak = 0, updated_at = ? WHERE id = ?", [now(), $job['id']]);
         } elseif (!$job || $job['status'] === 'done' || !empty($_POST['restart'])) {
             db()->prepare("INSERT INTO jobs (rule_id, status, created_at, updated_at) VALUES (?, 'running', ?, ?)")->execute([$ruleId, now(), now()]);
         }
@@ -403,7 +403,7 @@ case 'page':
 /* ---------- Backfill progress ---------- */
 case 'backfill':
     $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)($_GET['id'] ?? 0)]);
-    $rule = $st->fetch();
+    $rule = fetch_one($st);
     $pg = $rule ? get_page($rule['page_id']) : null;
     if (!$rule || !$pg || !$rule['post_id']) redirect('?');
     top('رد على الكومنتات القديمة'); ?>
@@ -468,7 +468,7 @@ case 'rule':
     if (!$pg) redirect('?');
     $id = (int)($_GET['id'] ?? 0);
     $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0];
-    if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = $st->fetch() ?: $r; }
+    if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = fetch_one($st) ?: $r; }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
         foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
@@ -556,8 +556,8 @@ case 'rule':
 default:
     top('الصفحات');
     $hasPages = count($pages) > 0; $hasActive = (bool)array_filter($pages, fn($x) => (int)$x['active'] === 1);
-    $today = (int)db()->query("SELECT COUNT(*) FROM log WHERE created_at >= datetime('now','-1 day')")->fetchColumn();
-    $total = (int)db()->query('SELECT COUNT(*) FROM log')->fetchColumn(); ?>
+    $today = (int)fetch_col(db()->query("SELECT COUNT(*) FROM log WHERE created_at >= datetime('now','-1 day')"));
+    $total = (int)fetch_col(db()->query('SELECT COUNT(*) FROM log')); ?>
     <?php if (!($appReady && $webhookOk && $hasPages && $hasActive)): ?>
     <div class="card">
       <h2>خطوات التشغيل</h2>
