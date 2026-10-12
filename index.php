@@ -151,6 +151,35 @@ if (empty($_SESSION['auth'])) {
     <?php bottom(); exit;
 }
 
+/* ================= Backfill step (AJAX, small batches) ================= */
+if ($a === 'backfill_step') {
+    check_csrf();
+    session_write_close();
+    @set_time_limit(90);
+    header('Content-Type: application/json; charset=utf-8');
+    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)($_POST['id'] ?? 0)]);
+    $rule = $st->fetch();
+    $pg = $rule ? get_page($rule['page_id']) : null;
+    if (!$rule || !$pg || !$rule['post_id']) { echo json_encode(['error' => 'القاعدة مش موجودة']); exit; }
+    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 8];
+    if (!empty($_POST['after'])) $params['after'] = (string)$_POST['after'];
+    $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
+    if ($e = gerr($res)) { echo json_encode(['error' => $e], JSON_UNESCAPED_UNICODE); exit; }
+    $stats = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0];
+    foreach ($res['data'] ?? [] as $c) {
+        if (($c['from']['id'] ?? '') === $pg['id']) continue;
+        $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''),
+            isset($c['created_time']) ? strtotime($c['created_time']) : null, (string)($c['from']['id'] ?? ''));
+        if ($out['status'] === 'duplicate') $stats['dup']++;
+        elseif ($out['status'] === 'no_rule') $stats['nomatch']++;
+        elseif (!empty($out['errors']) && ($out['comment'] ?? '') === 'failed') $stats['fail']++;
+        else $stats['done']++;
+    }
+    $next = isset($res['paging']['next']) ? ($res['paging']['cursors']['after'] ?? null) : null;
+    echo json_encode(['stats' => $stats, 'count' => count($res['data'] ?? []), 'after' => $next, 'finished' => $next === null], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /* ================= Actions ================= */
 if ($a) {
     check_csrf();
@@ -371,7 +400,7 @@ case 'page':
               <a class="btn sec sm" href="?p=rule&page=<?= urlencode($pg['id']) ?>&id=<?= (int)$r['id'] ?>">تعديل</a>
               <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="rule_toggle"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="back" value="<?= h($back) ?>"><button class="btn sec sm"><?= (int)$r['active'] === 1 ? 'إيقاف' : 'تشغيل' ?></button></form>
               <?php if ($r['post_id']): ?>
-              <form method="post" data-confirm="هيرد على الكومنتات القديمة اللي على البوست ده (لحد 300 كومنت). الرسالة الخاصة بتتبعت بس للكومنتات اللي عمرها أقل من 7 أيام. نكمل؟"><?= csrf_field() ?><input type="hidden" name="a" value="rule_backfill"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn sec sm">رد على القديم</button></form>
+              <a class="btn sec sm" href="?p=backfill&id=<?= (int)$r['id'] ?>">رد على القديم</a>
               <?php endif; ?>
               <form method="post" data-confirm="تمسح القاعدة دي؟"><?= csrf_field() ?><input type="hidden" name="a" value="rule_delete"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="back" value="<?= h($back) ?>"><button class="btn red sm">مسح</button></form>
             </div>
@@ -394,6 +423,56 @@ case 'page':
       <?php foreach ($logs as $l): ?><tr><td style="white-space:nowrap"><?= h(fmt_time($l['created_at'])) ?></td><td><?= h($l['from_name'] ?: '—') ?></td><td><div class="clip"><?= h($l['message']) ?></div><?php if ($l['error']): ?><div class="muted" style="color:var(--bad)"><?= h($l['error']) ?></div><?php endif; ?></td><td><?= status_badge($l['comment_status']) ?></td><td><?= status_badge($l['dm_status']) ?></td></tr><?php endforeach; ?>
       </table><?php endif; ?>
     </div>
+    <?php bottom(); break;
+
+/* ---------- Backfill progress ---------- */
+case 'backfill':
+    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)($_GET['id'] ?? 0)]);
+    $rule = $st->fetch();
+    $pg = $rule ? get_page($rule['page_id']) : null;
+    if (!$rule || !$pg || !$rule['post_id']) redirect('?');
+    top('رد على الكومنتات القديمة'); ?>
+    <p><a href="?p=page&id=<?= urlencode($pg['id']) ?>">→ <?= h($pg['name']) ?></a></p>
+    <h1>رد على الكومنتات القديمة</h1>
+    <div class="card">
+      <p><strong><?= h($rule['name']) ?></strong><br><span class="muted">📍 <?= h($rule['post_label'] ?: $rule['post_id']) ?></span></p>
+      <p class="muted">الأداة بتمشي على الكومنتات على دفعات صغيرة. سيب الصفحة دي مفتوحة لحد ما تخلص. الكومنتات اللي اترد عليها قبل كده مش هتتكرر، والرسالة الخاصة بتتبعت بس للكومنتات اللي عمرها أقل من 7 أيام (غير كده بيتكتب الرد البديل لو حاطه).</p>
+      <div style="background:var(--line);border-radius:99px;height:10px;overflow:hidden;margin:14px 0"><div id="bar" style="height:100%;width:3%;background:var(--acc);transition:width .4s"></div></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+        <div><div class="muted">اترد عليها</div><div class="stat" id="s_done">0</div></div>
+        <div><div class="muted">كان مترد عليها</div><div class="stat" id="s_dup">0</div></div>
+        <div><div class="muted">مش مطابقة</div><div class="stat" id="s_nomatch">0</div></div>
+        <div><div class="muted">فيها مشكلة</div><div class="stat" id="s_fail">0</div></div>
+      </div>
+      <p id="status" style="margin-top:14px;font-weight:600">جاري البدء…</p>
+      <div class="row"><button class="btn" id="go">ابدأ</button><button class="btn red" id="stop" style="display:none">إيقاف</button>
+        <a class="btn sec" href="?p=logs">السجل</a></div>
+    </div>
+    <script>
+    (function(){
+      const csrf=<?= json_encode(csrf()) ?>, id=<?= (int)$rule['id'] ?>;
+      const t={done:0,dup:0,nomatch:0,fail:0}; let after=null, running=false, seen=0, batches=0;
+      const $=i=>document.getElementById(i), go=$('go'), stop=$('stop'), st=$('status');
+      function paint(){for(const k in t)$('s_'+k).textContent=t[k];$('bar').style.width=Math.min(95,5+batches*4)+'%';}
+      async function step(){
+        if(!running) return;
+        const fd=new FormData(); fd.append('a','backfill_step'); fd.append('csrf',csrf); fd.append('id',id); if(after) fd.append('after',after);
+        let j;
+        try{ const r=await fetch('index.php',{method:'POST',body:fd,credentials:'same-origin'}); j=await r.json(); }
+        catch(e){ st.textContent='⚠️ الاتصال اتقطع، بحاول تاني…'; setTimeout(step,4000); return; }
+        if(j.error){ st.textContent='❌ '+j.error; finish(false); return; }
+        for(const k in t)t[k]+=j.stats[k]; seen+=j.count; batches++; after=j.after; paint();
+        st.textContent='اتراجع '+seen+' كومنت…';
+        if(j.finished){ finish(true); return; }
+        setTimeout(step,1200);
+      }
+      function finish(ok){ running=false; stop.style.display='none'; go.style.display=''; go.textContent='ابدأ تاني';
+        if(ok){ $('bar').style.width='100%'; st.textContent='✅ خلص — اتراجع '+seen+' كومنت'; } }
+      go.onclick=()=>{ running=true; go.style.display='none'; stop.style.display=''; st.textContent='جاري الرد…'; step(); };
+      stop.onclick=()=>{ running=false; st.textContent='⏸ اتوقف — تقدر تكمل بـ "ابدأ تاني"'; stop.style.display='none'; go.style.display=''; go.textContent='كمّل'; };
+      st.textContent='اضغط ابدأ';
+    })();
+    </script>
     <?php bottom(); break;
 
 /* ---------- Rule editor ---------- */
