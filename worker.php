@@ -8,6 +8,13 @@ $lock = fopen(DATA_DIR . '/worker.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) exit;   // previous run still going
 
 set_setting('worker_seen', now());
+
+// housekeeping once a day: keep the log to the last 120 days
+if (setting('last_prune', '') !== gmdate('Y-m-d')) {
+    db()->exec("DELETE FROM log WHERE created_at < datetime('now', '-120 days')");
+    db()->exec("DELETE FROM jobs WHERE status = 'done' AND updated_at < datetime('now', '-30 days')");
+    set_setting('last_prune', gmdate('Y-m-d'));
+}
 $deadline = time() + 50;
 while (time() < $deadline) {
     $jobs = db()->query("SELECT * FROM jobs WHERE status = 'running' ORDER BY updated_at ASC")->fetchAll();

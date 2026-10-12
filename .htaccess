@@ -1,0 +1,9 @@
+Options -Indexes
+DirectoryIndex index.php
+
+# never serve git metadata, the database folder or internal PHP files over the web
+RedirectMatch 404 /\.git
+RedirectMatch 404 /data/
+<FilesMatch "^(lib|worker)\.php$">
+  Require all denied
+</FilesMatch>

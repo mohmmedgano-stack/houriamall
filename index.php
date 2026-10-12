@@ -59,7 +59,7 @@ details summary{cursor:pointer;font-weight:600;color:var(--acc)}
 <body>
 <header><div class="hwrap"><div class="brand">🤖 Gano <span>Auto Reply</span></div>
 <?php if ($nav): ?><nav>
-<a href="?" class="<?= in_array($cur, ['home', 'page', 'rule'], true) ? 'on' : '' ?>">الصفحات</a>
+<a href="?" class="<?= in_array($cur, ['home', 'page', 'rule', 'backfill'], true) ? 'on' : '' ?>">الصفحات</a>
 <a href="?p=logs" class="<?= $cur === 'logs' ? 'on' : '' ?>">السجل</a>
 <a href="?p=settings" class="<?= $cur === 'settings' ? 'on' : '' ?>">الإعدادات</a>
 <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="a" value="logout"><button class="btn sec sm" style="margin-inline-start:6px">خروج</button></form>
@@ -79,9 +79,14 @@ document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('s
 <?php }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل']];
+    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'already' => ['off', 'مترد عليه قبل كده']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
+}
+
+function back_url(): string {
+    $b = (string)($_POST['back'] ?? '?');
+    return preg_match('/^\?[A-Za-z0-9_=&%.-]*$/', $b) ? $b : '?';
 }
 
 function fmt_time(?string $utc): string {
@@ -222,7 +227,7 @@ if ($a) {
                 if ($e = gerr($r)) flash('مقدرتش أفعّل الصفحة: ' . $e, 'err');
                 else { db()->prepare('UPDATE pages SET active = 1 WHERE id = ?')->execute([$pg['id']]); flash('اتفعّل الرد التلقائي على ' . $pg['name'] . ' ✅'); }
             }
-            redirect($_POST['back'] ?? '?');
+            redirect(back_url());
 
         case 'rule_save':
             $pageId = (string)($_POST['page_id'] ?? '');
@@ -262,43 +267,15 @@ if ($a) {
             redirect('?p=page&id=' . urlencode($pageId));
 
         case 'rule_toggle':
-            db()->prepare('UPDATE rules SET active = 1 - active WHERE id = ?')->execute([(int)$_POST['id']]);
-            redirect($_POST['back'] ?? '?');
+            db()->prepare('UPDATE rules SET active = 1 - active WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
+            redirect(back_url());
 
         case 'rule_delete':
-            db()->prepare('DELETE FROM rules WHERE id = ?')->execute([(int)$_POST['id']]);
+            db()->prepare('DELETE FROM rules WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
+            db()->prepare('DELETE FROM jobs WHERE rule_id = ?')->execute([(int)($_POST['id'] ?? 0)]);
             flash('اتمسحت القاعدة');
-            redirect($_POST['back'] ?? '?');
+            redirect(back_url());
 
-        case 'rule_backfill':
-            $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$_POST['id']]);
-            $rule = $st->fetch();
-            $pg = $rule ? get_page($rule['page_id']) : null;
-            if (!$rule || !$pg || !$rule['post_id']) redirect('?');
-            @set_time_limit(300);
-            ignore_user_abort(true);
-            session_write_close(); // don't lock the user's other pages while this runs
-            $stats = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0]; $after = null; $loops = 0; $fetchErr = null;
-            do {
-                $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 50];
-                if ($after) $params['after'] = $after;
-                $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
-                if ($e = gerr($res)) { $fetchErr = $e; break; }
-                foreach ($res['data'] ?? [] as $c) {
-                    if (($c['from']['id'] ?? '') === $pg['id']) continue;
-                    $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''), isset($c['created_time']) ? strtotime($c['created_time']) : null, (string)($c['from']['id'] ?? ''));
-                    if ($out['status'] === 'duplicate') $stats['dup']++;
-                    elseif ($out['status'] === 'no_rule') $stats['nomatch']++;
-                    elseif (!empty($out['errors'])) $stats['fail']++;
-                    else $stats['done']++;
-                }
-                $after = $res['paging']['cursors']['after'] ?? null;
-                $next = isset($res['paging']['next']);
-            } while ($next && $after && ++$loops < 6);
-            session_start();
-            if ($fetchErr) flash('فشل جلب الكومنتات: ' . $fetchErr, 'err');
-            flash("الكومنتات القديمة: اترد على {$stats['done']} — كان مترد عليها {$stats['dup']} — مش مطابقة {$stats['nomatch']} — فيها مشكلة {$stats['fail']}");
-            redirect('?p=page&id=' . urlencode($rule['page_id']));
     }
     redirect('?');
 }
@@ -458,7 +435,7 @@ case 'backfill':
         if(extra) for(const k in extra) fd.append(k,extra[k]);
         try{ const r=await fetch('index.php',{method:'POST',body:fd,credentials:'same-origin'}); render(await r.json()); }catch(e){}
       }
-      function render(j){
+      var render=function(j){
         if(j.error){ $('err').textContent=j.error; return; }
         const job=j.job;
         $('warn').textContent = (!j.worker_ok && job && job.status==='running') ? 'لو الأرقام مش بتتحرك خلال دقيقتين، المهمة المجدولة على السيرفر لسه ما اشتغلتش.' : '';
@@ -471,11 +448,13 @@ case 'backfill':
         $('go').style.display = running ? 'none' : '';
         $('go').textContent = job.status==='done' ? 'شغّله تاني' : (job.status==='paused'||job.status==='error') ? 'كمّل' : 'ابدأ';
         $('restart').style.display = (job.status==='paused'||job.status==='error') ? '' : 'none';
-      }
+      };
       $('go').onclick=()=>call('job_start');
       $('pause').onclick=()=>call('job_pause');
       $('restart').onclick=()=>call('job_start',{restart:1});
-      call('job_status'); setInterval(()=>call('job_status'),3000);
+      let last=null; window.__jobState=()=>last;
+      const _render=render; render=function(j){ last=j&&j.job?j.job.status:null; _render(j); };
+      (function loop(){ call('job_status').finally(()=>setTimeout(loop, last==='running'?3000:15000)); })();
     })();
     </script>
     <?php bottom(); break;
@@ -493,7 +472,7 @@ case 'rule':
         $r['post_id'] = ($draft['scope'] ?? 'post') === 'post' ? (($draft['post_manual'] ?? '') ?: ($draft['post_id'] ?? '')) : '';
         $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0;
     }
-    $scopeAll = $id && !$r['post_id'];
+    $scopeAll = $draft ? (($draft['scope'] ?? 'post') === 'all') : ($id && !$r['post_id']);
 
     // Fetch recent posts (organic + ad posts)
     $posts = []; $postErr = null;
