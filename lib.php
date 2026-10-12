@@ -309,7 +309,7 @@ function run_job_batch(array $job): array {
     $pg = $rule ? get_page($rule['page_id']) : null;
     if (!$rule || !$pg || !$rule['post_id']) { $upd(['status' => 'error', 'error' => 'القاعدة أو الصفحة مش موجودة']); return $job; }
 
-    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time,comments.limit(50){from{id}}', 'limit' => BACKFILL_BATCH];
+    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time,comments.limit(50){from{id}}', 'order' => 'reverse_chronological', 'limit' => BACKFILL_BATCH];
     if (!empty($job['after_cursor'])) $params['after'] = $job['after_cursor'];
     $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
     if ($e = gerr($res)) { $upd(['status' => 'error', 'error' => $e]); return $job; }
