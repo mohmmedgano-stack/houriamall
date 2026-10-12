@@ -27,6 +27,10 @@ function db(): PDO {
         from_name TEXT, message TEXT, comment_status TEXT, dm_status TEXT,
         error TEXT, created_at TEXT)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS log_page ON log(page_id, created_at)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id INTEGER, status TEXT, after_cursor TEXT,
+        seen INTEGER DEFAULT 0, done INTEGER DEFAULT 0, dup INTEGER DEFAULT 0, nomatch INTEGER DEFAULT 0, fail INTEGER DEFAULT 0,
+        error TEXT, created_at TEXT, updated_at TEXT)");
     $cols = array_column($pdo->query('PRAGMA table_info(rules)')->fetchAll(), 'name');
     if (!in_array('mention_user', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN mention_user INTEGER DEFAULT 0");
     if (!in_array('fallback_replies', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN fallback_replies TEXT");
@@ -280,4 +284,62 @@ function process_comment(array $page, string $postId, string $commentId, string 
         ->execute([$cs, $ds, implode(' | ', $errors), $commentId]);
 
     return ['status' => 'done', 'comment' => $cs, 'dm' => $ds, 'errors' => $errors];
+}
+
+
+/* ---------------- Background backfill jobs (run by worker.php from cron) ---------------- */
+const BACKFILL_BATCH = 2;
+
+function job_for_rule(int $ruleId): ?array {
+    $st = db()->prepare('SELECT * FROM jobs WHERE rule_id = ? ORDER BY id DESC LIMIT 1');
+    $st->execute([$ruleId]);
+    return $st->fetch() ?: null;
+}
+
+/** Process one small batch of a job. Returns the updated job row. */
+function run_job_batch(array $job): array {
+    $upd = function (array $f) use (&$job) {
+        $f['updated_at'] = now();
+        $sets = implode(', ', array_map(fn($k) => "$k = ?", array_keys($f)));
+        db()->prepare("UPDATE jobs SET $sets WHERE id = ?")->execute(array_merge(array_values($f), [$job['id']]));
+        $job = array_merge($job, $f);
+    };
+    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$job['rule_id']]);
+    $rule = $st->fetch();
+    $pg = $rule ? get_page($rule['page_id']) : null;
+    if (!$rule || !$pg || !$rule['post_id']) { $upd(['status' => 'error', 'error' => 'القاعدة أو الصفحة مش موجودة']); return $job; }
+
+    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time,comments.limit(50){from{id}}', 'limit' => BACKFILL_BATCH];
+    if (!empty($job['after_cursor'])) $params['after'] = $job['after_cursor'];
+    $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
+    if ($e = gerr($res)) { $upd(['status' => 'error', 'error' => $e]); return $job; }
+
+    $c = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0];
+    foreach ($res['data'] ?? [] as $cm) {
+        if (($cm['from']['id'] ?? '') === $pg['id']) continue;
+        // the page already answered this comment (manually or before the tool) → skip it
+        $pageReplied = false;
+        foreach ($cm['comments']['data'] ?? [] as $rep) { if (($rep['from']['id'] ?? '') === $pg['id']) { $pageReplied = true; break; } }
+        if ($pageReplied) { $c['dup']++; continue; }
+        $out = process_comment($pg, $rule['post_id'], (string)$cm['id'], (string)($cm['from']['name'] ?? ''), (string)($cm['message'] ?? ''),
+            isset($cm['created_time']) ? strtotime($cm['created_time']) : null, (string)($cm['from']['id'] ?? ''));
+        if ($out['status'] === 'duplicate') $c['dup']++;
+        elseif ($out['status'] === 'no_rule') $c['nomatch']++;
+        elseif (($out['comment'] ?? '') === 'failed' && !empty($out['errors'])) $c['fail']++;
+        else $c['done']++;
+    }
+    $next = isset($res['paging']['next']) ? ($res['paging']['cursors']['after'] ?? null) : null;
+
+    // the user may have paused while we were working — don't override that
+    $cur = db()->prepare('SELECT status FROM jobs WHERE id = ?'); $cur->execute([$job['id']]);
+    $status = (string)$cur->fetchColumn();
+    if ($status === 'running') $status = $next === null ? 'done' : 'running';
+
+    $upd([
+        'status' => $status, 'after_cursor' => $next,
+        'seen' => (int)$job['seen'] + count($res['data'] ?? []),
+        'done' => (int)$job['done'] + $c['done'], 'dup' => (int)$job['dup'] + $c['dup'],
+        'nomatch' => (int)$job['nomatch'] + $c['nomatch'], 'fail' => (int)$job['fail'] + $c['fail'],
+    ]);
+    return $job;
 }

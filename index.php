@@ -151,32 +151,27 @@ if (empty($_SESSION['auth'])) {
     <?php bottom(); exit;
 }
 
-/* ================= Backfill step (AJAX, small batches) ================= */
-if ($a === 'backfill_step') {
+/* ================= Background backfill jobs (AJAX) ================= */
+if (in_array($a, ['job_start', 'job_pause', 'job_status'], true)) {
     check_csrf();
     session_write_close();
-    @set_time_limit(90);
     header('Content-Type: application/json; charset=utf-8');
-    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)($_POST['id'] ?? 0)]);
-    $rule = $st->fetch();
-    $pg = $rule ? get_page($rule['page_id']) : null;
-    if (!$rule || !$pg || !$rule['post_id']) { echo json_encode(['error' => 'القاعدة مش موجودة']); exit; }
-    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 2];
-    if (!empty($_POST['after'])) $params['after'] = (string)$_POST['after'];
-    $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
-    if ($e = gerr($res)) { echo json_encode(['error' => $e], JSON_UNESCAPED_UNICODE); exit; }
-    $stats = ['done' => 0, 'dup' => 0, 'nomatch' => 0, 'fail' => 0];
-    foreach ($res['data'] ?? [] as $c) {
-        if (($c['from']['id'] ?? '') === $pg['id']) continue;
-        $out = process_comment($pg, $rule['post_id'], (string)$c['id'], (string)($c['from']['name'] ?? ''), (string)($c['message'] ?? ''),
-            isset($c['created_time']) ? strtotime($c['created_time']) : null, (string)($c['from']['id'] ?? ''));
-        if ($out['status'] === 'duplicate') $stats['dup']++;
-        elseif ($out['status'] === 'no_rule') $stats['nomatch']++;
-        elseif (!empty($out['errors']) && ($out['comment'] ?? '') === 'failed') $stats['fail']++;
-        else $stats['done']++;
+    $ruleId = (int)($_POST['id'] ?? 0);
+    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([$ruleId]);
+    if (!$st->fetch()) { echo json_encode(['error' => 'القاعدة مش موجودة'], JSON_UNESCAPED_UNICODE); exit; }
+    $job = job_for_rule($ruleId);
+    if ($a === 'job_start') {
+        if ($job && in_array($job['status'], ['paused', 'error'], true)) {
+            db()->prepare("UPDATE jobs SET status = 'running', error = '', updated_at = ? WHERE id = ?")->execute([now(), $job['id']]);
+        } elseif (!$job || $job['status'] === 'done' || !empty($_POST['restart'])) {
+            db()->prepare("INSERT INTO jobs (rule_id, status, created_at, updated_at) VALUES (?, 'running', ?, ?)")->execute([$ruleId, now(), now()]);
+        }
+    } elseif ($a === 'job_pause' && $job && $job['status'] === 'running') {
+        db()->prepare("UPDATE jobs SET status = 'paused', updated_at = ? WHERE id = ?")->execute([now(), $job['id']]);
     }
-    $next = isset($res['paging']['next']) ? ($res['paging']['cursors']['after'] ?? null) : null;
-    echo json_encode(['stats' => $stats, 'count' => count($res['data'] ?? []), 'after' => $next, 'finished' => $next === null], JSON_UNESCAPED_UNICODE);
+    $job = job_for_rule($ruleId);
+    $ws = setting('worker_seen');
+    echo json_encode(['job' => $job, 'worker_ok' => $ws && (time() - strtotime($ws . ' UTC')) < 180], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -436,41 +431,51 @@ case 'backfill':
     <h1>رد على الكومنتات القديمة</h1>
     <div class="card">
       <p><strong><?= h($rule['name']) ?></strong><br><span class="muted">📍 <?= h($rule['post_label'] ?: $rule['post_id']) ?></span></p>
-      <p class="muted">الأداة بتمشي على الكومنتات على دفعات صغيرة. سيب الصفحة دي مفتوحة لحد ما تخلص. الكومنتات اللي اترد عليها قبل كده مش هتتكرر، والرسالة الخاصة بتتبعت بس للكومنتات اللي عمرها أقل من 7 أيام (غير كده بيتكتب الرد البديل لو حاطه).</p>
-      <div style="background:var(--line);border-radius:99px;height:10px;overflow:hidden;margin:14px 0"><div id="bar" style="height:100%;width:3%;background:var(--acc);transition:width .4s"></div></div>
+      <p class="muted">بيشتغل على السيرفر نفسه، <?= BACKFILL_BATCH ?> كومنت في كل دفعة. تقدر تقفل الصفحة أو المتصفح وهو هيكمل لوحده، وترجع تشوف التقدم هنا في أي وقت. أي كومنت اترد عليه قبل كده — من الأداة أو من الصفحة بإيدك — مش هيترد عليه تاني.</p>
+      <p id="state" style="font-weight:700;font-size:17px;margin:10px 0">…</p>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+        <div><div class="muted">اتراجع</div><div class="stat" id="s_seen">0</div></div>
         <div><div class="muted">اترد عليها</div><div class="stat" id="s_done">0</div></div>
-        <div><div class="muted">كان مترد عليها</div><div class="stat" id="s_dup">0</div></div>
+        <div><div class="muted">كان مترد عليها قبل كده</div><div class="stat" id="s_dup">0</div></div>
         <div><div class="muted">مش مطابقة</div><div class="stat" id="s_nomatch">0</div></div>
         <div><div class="muted">فيها مشكلة</div><div class="stat" id="s_fail">0</div></div>
       </div>
-      <p id="status" style="margin-top:14px;font-weight:600">جاري البدء…</p>
-      <div class="row"><button class="btn" id="go">ابدأ</button><button class="btn red" id="stop" style="display:none">إيقاف</button>
-        <a class="btn sec" href="?p=logs">السجل</a></div>
+      <p id="err" class="muted" style="color:var(--bad)"></p>
+      <p id="warn" class="muted" style="color:var(--warn)"></p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="go">ابدأ</button>
+        <button class="btn red" id="pause" style="display:none">إيقاف مؤقت</button>
+        <button class="btn sec" id="restart" style="display:none">ابدأ من الأول</button>
+        <a class="btn sec" href="?p=logs">السجل</a>
+      </div>
     </div>
     <script>
     (function(){
-      const csrf=<?= json_encode(csrf()) ?>, id=<?= (int)$rule['id'] ?>;
-      const t={done:0,dup:0,nomatch:0,fail:0}; let after=null, running=false, seen=0, batches=0;
-      const $=i=>document.getElementById(i), go=$('go'), stop=$('stop'), st=$('status');
-      function paint(){for(const k in t)$('s_'+k).textContent=t[k];$('bar').style.width=Math.min(95,5+batches*1)+'%';}
-      async function step(){
-        if(!running) return;
-        const fd=new FormData(); fd.append('a','backfill_step'); fd.append('csrf',csrf); fd.append('id',id); if(after) fd.append('after',after);
-        let j;
-        try{ const r=await fetch('index.php',{method:'POST',body:fd,credentials:'same-origin'}); j=await r.json(); }
-        catch(e){ st.textContent='⚠️ الاتصال اتقطع، بحاول تاني…'; setTimeout(step,4000); return; }
-        if(j.error){ st.textContent='❌ '+j.error; finish(false); return; }
-        for(const k in t)t[k]+=j.stats[k]; seen+=j.count; batches++; after=j.after; paint();
-        st.textContent='اتراجع '+seen+' كومنت…';
-        if(j.finished){ finish(true); return; }
-        setTimeout(step,1200);
+      const csrf=<?= json_encode(csrf()) ?>, id=<?= (int)$rule['id'] ?>, $=i=>document.getElementById(i);
+      const labels={running:'⏳ شغال على السيرفر…',paused:'⏸ متوقف مؤقتاً',done:'✅ خلص',error:'❌ وقف بسبب خطأ'};
+      async function call(a,extra){
+        const fd=new FormData(); fd.append('a',a); fd.append('csrf',csrf); fd.append('id',id);
+        if(extra) for(const k in extra) fd.append(k,extra[k]);
+        try{ const r=await fetch('index.php',{method:'POST',body:fd,credentials:'same-origin'}); render(await r.json()); }catch(e){}
       }
-      function finish(ok){ running=false; stop.style.display='none'; go.style.display=''; go.textContent='ابدأ تاني';
-        if(ok){ $('bar').style.width='100%'; st.textContent='✅ خلص — اتراجع '+seen+' كومنت'; } }
-      go.onclick=()=>{ running=true; go.style.display='none'; stop.style.display=''; st.textContent='جاري الرد…'; step(); };
-      stop.onclick=()=>{ running=false; st.textContent='⏸ اتوقف — تقدر تكمل بـ "ابدأ تاني"'; stop.style.display='none'; go.style.display=''; go.textContent='كمّل'; };
-      st.textContent='اضغط ابدأ';
+      function render(j){
+        if(j.error){ $('err').textContent=j.error; return; }
+        const job=j.job;
+        $('warn').textContent = (!j.worker_ok && job && job.status==='running') ? 'لو الأرقام مش بتتحرك خلال دقيقتين، المهمة المجدولة على السيرفر لسه ما اشتغلتش.' : '';
+        if(!job){ $('state').textContent='لسه ما بدأش'; $('go').style.display=''; $('go').textContent='ابدأ'; $('pause').style.display='none'; $('restart').style.display='none'; return; }
+        for(const k of ['seen','done','dup','nomatch','fail']) $('s_'+k).textContent=job[k]||0;
+        $('state').textContent=labels[job.status]||job.status;
+        $('err').textContent = job.status==='error' ? (job.error||'') : '';
+        const running = job.status==='running';
+        $('pause').style.display = running ? '' : 'none';
+        $('go').style.display = running ? 'none' : '';
+        $('go').textContent = job.status==='done' ? 'شغّله تاني' : (job.status==='paused'||job.status==='error') ? 'كمّل' : 'ابدأ';
+        $('restart').style.display = (job.status==='paused'||job.status==='error') ? '' : 'none';
+      }
+      $('go').onclick=()=>call('job_start');
+      $('pause').onclick=()=>call('job_pause');
+      $('restart').onclick=()=>call('job_start',{restart:1});
+      call('job_status'); setInterval(()=>call('job_status'),3000);
     })();
     </script>
     <?php bottom(); break;
