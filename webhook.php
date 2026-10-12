@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
+header('Cache-Control: no-store, no-cache, must-revalidate, private');
+header('X-LiteSpeed-Cache-Control: no-cache');
 
 // 1) Verification handshake from Meta
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
