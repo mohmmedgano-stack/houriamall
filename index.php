@@ -161,7 +161,7 @@ if ($a === 'backfill_step') {
     $rule = $st->fetch();
     $pg = $rule ? get_page($rule['page_id']) : null;
     if (!$rule || !$pg || !$rule['post_id']) { echo json_encode(['error' => 'القاعدة مش موجودة']); exit; }
-    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 8];
+    $params = ['filter' => 'toplevel', 'fields' => 'id,message,from{id,name},created_time', 'limit' => 2];
     if (!empty($_POST['after'])) $params['after'] = (string)$_POST['after'];
     $res = graph('GET', $rule['post_id'] . '/comments', $params, $pg['token']);
     if ($e = gerr($res)) { echo json_encode(['error' => $e], JSON_UNESCAPED_UNICODE); exit; }
