@@ -31,6 +31,19 @@ $safe(function () {
         AND (error LIKE '%locked%' OR error LIKE '%busy%' OR error LIKE '%Network%' OR error LIKE '%Bad response%' OR error LIKE '%timed out%' OR error LIKE '%#2)%' OR error LIKE '%#1)%')");
 }, 'resume');
 
+// one-time upgrade: subscribe pages to message events too (needed for sending photos)
+if (setting('subs_version', '') !== PAGE_FIELDS) {
+    $safe(function () {
+        if (setting('base_url', '') === '') return;            // wait until the dashboard has been opened once
+        if (subscribe_app_webhook() === null) {
+            foreach (db()->query('SELECT * FROM pages WHERE active = 1')->fetchAll() as $pg) {
+                graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => PAGE_FIELDS], $pg['token']);
+            }
+            set_setting('subs_version', PAGE_FIELDS);
+        }
+    }, 'subscribe');
+}
+
 $deadline = time() + 50;
 
 $safe(fn() => retry_due(10), 'retry');

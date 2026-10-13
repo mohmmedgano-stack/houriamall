@@ -36,8 +36,10 @@ function db(): PDO {
     $cols = array_column($pdo->query('PRAGMA table_info(rules)')->fetchAll(), 'name');
     if (!in_array('mention_user', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN mention_user INTEGER DEFAULT 0");
     if (!in_array('fallback_replies', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN fallback_replies TEXT");
+    if (!in_array('images', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN images TEXT");
+    if (!in_array('images_button', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN images_button TEXT");
     $lcols = array_column($pdo->query('PRAGMA table_info(log)')->fetchAll(), 'name');
-    foreach (['from_id' => 'TEXT', 'comment_ts' => 'INTEGER', 'attempts' => 'INTEGER DEFAULT 0', 'next_retry' => 'TEXT'] as $c => $t) {
+    foreach (['from_id' => 'TEXT', 'comment_ts' => 'INTEGER', 'attempts' => 'INTEGER DEFAULT 0', 'next_retry' => 'TEXT', 'psid' => 'TEXT', 'images_status' => 'TEXT'] as $c => $t) {
         if (!in_array($c, $lcols, true)) $pdo->exec("ALTER TABLE log ADD COLUMN $c $t");
     }
     $jcols = array_column($pdo->query('PRAGMA table_info(jobs)')->fetchAll(), 'name');
@@ -89,6 +91,10 @@ function get_page(string $id): ?array {
 function now(): string { return gmdate('Y-m-d H:i:s'); }
 
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+function app_base(): string {
+    return PHP_SAPI === 'cli' ? (string)setting('base_url', '') : base_url();
+}
 
 function base_url(): string {
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
@@ -200,20 +206,23 @@ function import_pages(string $userToken): array {
 
     // Re-subscribe pages that were already active (tokens changed)
     foreach (db()->query('SELECT * FROM pages WHERE active = 1')->fetchAll() as $pg) {
-        graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => 'feed'], $pg['token']);
+        graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => PAGE_FIELDS], $pg['token']);
     }
     set_setting('token_problem', '');
     return ['count' => $count];
 }
 
-/** Register the app-level webhook (Page → feed) pointing at this install. */
+const PAGE_FIELDS = 'feed,messages,messaging_postbacks';
+
+/** Register the app-level webhook (Page → feed + messages) pointing at this install. */
 function subscribe_app_webhook(): ?string {
     $appId = setting('app_id');
     if (!$appId || !setting('app_secret')) return 'حط App ID و App Secret الأول';
+    if (app_base() === '') return 'لسه مفيش رابط محفوظ للأداة';
     $r = graph('POST', $appId . '/subscriptions', [
         'object' => 'page',
-        'callback_url' => base_url() . '/webhook.php',
-        'fields' => 'feed',
+        'callback_url' => app_base() . '/webhook.php',
+        'fields' => PAGE_FIELDS,
         'verify_token' => setting('verify_token', ''),
         'include_values' => 'true',
     ], app_token());
@@ -343,11 +352,24 @@ function deliver(array $page, array $rule, array $row): array {
         if (!$txt) $ds = 'skipped';
         elseif ($ts && (time() - $ts) > (7 * 86400 - 600)) $ds = 'expired';
         else {
+            $msg = ['text' => personalize($txt, $fromName)];
+            $imgs = rule_images($rule);
+            if ($imgs) {
+                // Meta allows only ONE private reply per comment until the person answers →
+                // offer a button; tapping it (or any reply) opens the chat and the photos are sent right away
+                $msg['quick_replies'] = [['content_type' => 'text', 'title' => mb_substr((string)($rule['images_button'] ?? '') ?: '📸 شوف الصور', 0, 20), 'payload' => 'IMG|' . $commentId]];
+            }
             $r = graph('POST', $page['id'] . '/messages', [
                 'recipient' => json_encode(['comment_id' => $commentId]),
-                'message'   => json_encode(['text' => personalize($txt, $fromName)], JSON_UNESCAPED_UNICODE),
+                'message'   => json_encode($msg, JSON_UNESCAPED_UNICODE),
             ], $page['token']);
-            if (!gerr($r)) $ds = 'sent';
+            if (!gerr($r)) {
+                $ds = 'sent';
+                if (!empty($r['recipient_id'])) {
+                    db_run('UPDATE log SET psid = ?, images_status = ? WHERE comment_id = ?',
+                        [(string)$r['recipient_id'], $imgs ? 'waiting' : null, $commentId]);
+                }
+            }
             else {
                 $d = $attempt < MAX_ATTEMPTS ? retry_delay($r, $attempt) : null;
                 if ($d !== null) { $ds = 'retry'; $wait = $d; } else $ds = 'failed';
@@ -507,4 +529,54 @@ function run_job_batch(array $job): array {
         'nomatch' => (int)$job['nomatch'] + $c['nomatch'], 'fail' => (int)$job['fail'] + $c['fail'],
     ]);
     return $job;
+}
+
+
+/* ---------------- Photos sent after the person answers the private reply ---------------- */
+function rule_images(array $rule): array {
+    $a = json_decode((string)($rule['images'] ?? ''), true);
+    return is_array($a) ? array_values(array_filter($a, 'is_string')) : [];
+}
+
+/**
+ * Called from the webhook when someone writes to the page (or taps "see photos").
+ * If we owe them photos from a comment reply, send them now (the 24h window is open).
+ */
+function send_pending_images(array $page, string $psid, ?string $commentId = null): int {
+    if ($commentId) {
+        $st = db()->prepare("SELECT * FROM log WHERE comment_id = ? AND page_id = ? AND images_status = 'waiting'");
+        $st->execute([$commentId, $page['id']]);
+    } else {
+        $st = db()->prepare("SELECT * FROM log WHERE psid = ? AND page_id = ? AND images_status = 'waiting' ORDER BY created_at DESC LIMIT 1");
+        $st->execute([$psid, $page['id']]);
+    }
+    $row = fetch_one($st);
+    if (!$row) return 0;
+    // claim it first so a double tap doesn't send the photos twice
+    $claim = db_run("UPDATE log SET images_status = 'sending' WHERE comment_id = ? AND images_status = 'waiting'", [$row['comment_id']]);
+    if ($claim->rowCount() === 0) return 0;
+
+    $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$row['rule_id']]);
+    $rule = fetch_one($st);
+    $imgs = $rule ? rule_images($rule) : [];
+    $sent = 0; $errs = [];
+    foreach (array_slice($imgs, 0, 10) as $url) {
+        $r = graph('POST', $page['id'] . '/messages', [
+            'recipient' => json_encode(['id' => $psid]),
+            'messaging_type' => 'RESPONSE',
+            'message' => json_encode(['attachment' => ['type' => 'image', 'payload' => ['url' => $url, 'is_reusable' => true]]]),
+        ], $page['token']);
+        if (gerr($r)) {
+            // one quick retry for temporary problems
+            if (retry_delay($r, 1) !== null) { usleep(1500000); $r = graph('POST', $page['id'] . '/messages', [
+                'recipient' => json_encode(['id' => $psid]), 'messaging_type' => 'RESPONSE',
+                'message' => json_encode(['attachment' => ['type' => 'image', 'payload' => ['url' => $url, 'is_reusable' => true]]]),
+            ], $page['token']); }
+        }
+        if (gerr($r)) $errs[] = 'صورة: ' . gerr($r); else $sent++;
+    }
+    $status = $sent > 0 ? 'sent' : 'failed';
+    db_run("UPDATE log SET images_status = ?, error = CASE WHEN ? = '' THEN error ELSE TRIM(error || ' | ' || ?, ' |') END WHERE comment_id = ?",
+        [$status, implode(' | ', $errs), implode(' | ', $errs), $row['comment_id']]);
+    return $sent;
 }

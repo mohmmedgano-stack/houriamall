@@ -46,6 +46,17 @@ foreach ($data['entry'] ?? [] as $entry) {
     $page = get_page($pageId);
     if (!$page || (int)$page['active'] !== 1) continue;
 
+    // someone wrote to the page or tapped "see photos" → send the photos we promised
+    foreach ($entry['messaging'] ?? [] as $ev) {
+        if (!empty($ev['message']['is_echo'])) continue;
+        $psid = (string)($ev['sender']['id'] ?? '');
+        if ($psid === '' || $psid === $pageId) continue;
+        $payload = (string)($ev['message']['quick_reply']['payload'] ?? ($ev['postback']['payload'] ?? ''));
+        $cid = strpos($payload, 'IMG|') === 0 ? substr($payload, 4) : null;
+        try { send_pending_images($page, $psid, $cid ?: null); }
+        catch (Throwable $e) { error_log('[autoreply] images: ' . $e->getMessage()); }
+    }
+
     foreach ($entry['changes'] ?? [] as $ch) {
         if (($ch['field'] ?? '') !== 'feed') continue;
         $v = $ch['value'] ?? [];

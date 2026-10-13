@@ -78,10 +78,37 @@ document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('s
 </body></html>
 <?php }
 
+function images_badge(?string $s): string {
+    $map = ['waiting' => ['warn', '📸 مستنية رده'], 'sending' => ['warn', '📸 بتتبعت'], 'sent' => ['ok', '📸 اتبعتت'], 'failed' => ['bad', '📸 فشلت']];
+    if (!$s || !isset($map[$s])) return '';
+    return ' <span class="badge ' . $map[$s][0] . '">' . $map[$s][1] . '</span>';
+}
+
 function status_badge(string $s): string {
     $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'already' => ['off', 'مترد عليه قبل كده'], 'retry' => ['warn', 'هيتعاد لوحده']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
+}
+
+/** Validate and store uploaded photos in /uploads, appending their public URLs to $imgs. Returns an error text or null. */
+function save_uploaded_images(array &$imgs): ?string {
+    $f = $_FILES['images'] ?? null;
+    if (!$f || !is_array($f['name'])) return null;
+    $dir = __DIR__ . '/uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $types = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp'];
+    foreach ($f['name'] as $i => $n) {
+        if (($f['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+        if ($f['error'][$i] !== UPLOAD_ERR_OK) return 'مقدرتش أرفع الصورة "' . $n . '" — جرّب صورة أصغر';
+        if ($f['size'][$i] > 8 * 1024 * 1024) return 'الصورة "' . $n . '" أكبر من 8 ميجا';
+        $info = @getimagesize($f['tmp_name'][$i]);
+        if (!$info || !isset($types[$info[2]])) return 'الملف "' . $n . '" مش صورة (JPG / PNG / WEBP / GIF بس)';
+        if (count($imgs) >= 10) return 'أقصى عدد 10 صور';
+        $name = bin2hex(random_bytes(10)) . '.' . $types[$info[2]];
+        if (!move_uploaded_file($f['tmp_name'][$i], $dir . '/' . $name)) return 'حصلت مشكلة في حفظ الصورة "' . $n . '"';
+        $imgs[] = base_url() . '/uploads/' . $name;
+    }
+    return null;
 }
 
 function back_url(): string {
@@ -156,6 +183,8 @@ if (empty($_SESSION['auth'])) {
     <?php bottom(); exit;
 }
 
+if (setting('base_url', '') !== base_url()) set_setting('base_url', base_url());
+
 /* ================= Background backfill jobs (AJAX) ================= */
 if (in_array($a, ['job_start', 'job_pause', 'job_status'], true)) {
     check_csrf();
@@ -223,7 +252,7 @@ if ($a) {
                 graph('DELETE', $pg['id'] . '/subscribed_apps', [], $pg['token']);
                 flash('اتوقف الرد التلقائي على ' . $pg['name']);
             } else {
-                $r = graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => 'feed'], $pg['token']);
+                $r = graph('POST', $pg['id'] . '/subscribed_apps', ['subscribed_fields' => PAGE_FIELDS], $pg['token']);
                 if ($e = gerr($r)) flash('مقدرتش أفعّل الصفحة: ' . $e, 'err');
                 else { db()->prepare('UPDATE pages SET active = 1 WHERE id = ?')->execute([$pg['id']]); flash('اتفعّل الرد التلقائي على ' . $pg['name'] . ' ✅'); }
             }
@@ -248,19 +277,24 @@ if ($a) {
             $sc = isset($_POST['send_comment']) ? 1 : 0; $sd = isset($_POST['send_dm']) ? 1 : 0;
             $cr = trim((string)($_POST['comment_replies'] ?? '')); $dm = trim((string)($_POST['dm_messages'] ?? ''));
             $fb = trim((string)($_POST['fallback_replies'] ?? '')); $mu = isset($_POST['mention_user']) ? 1 : 0;
+            // photos: keep the ones not removed, add new uploads (max 10)
+            $imgs = array_values(array_filter((array)($_POST['keep_images'] ?? []), fn($u) => is_string($u) && strpos($u, base_url() . '/uploads/') === 0));
+            $upErr = save_uploaded_images($imgs);
+            $ib = mb_substr(trim((string)($_POST['images_button'] ?? '')), 0, 20);
             $err = null;
             if ($mode === 'keywords' && !keywords_of($kw)) $err = 'اكتب كلمة واحدة على الأقل';
             elseif (!$sc && !$sd) $err = 'لازم تختار رد كومنت أو رسالة خاصة أو الاتنين';
             elseif ($sc && !variants($cr)) $err = 'اكتب نص الرد على الكومنت';
             elseif ($sd && !variants($dm)) $err = 'اكتب نص الرسالة الخاصة';
+            if (!$err && $upErr) $err = $upErr;
             if ($err) { $_SESSION['rule_draft'] = $_POST; flash($err, 'err'); redirect('?p=rule&page=' . urlencode($pageId) . ($id ? '&id=' . $id : '')); }
             $name = trim((string)($_POST['name'] ?? '')) ?: ($postLabel ?: 'كل البوستات');
-            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu];
+            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu, json_encode($imgs, JSON_UNESCAPED_SLASHES), $ib];
             if ($id) {
-                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=? WHERE id=? AND page_id=?')
+                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=?, images=?, images_button=? WHERE id=? AND page_id=?')
                     ->execute(array_merge($vals, [$id, $pageId]));
             } else {
-                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute(array_merge($vals, [$pageId, now()]));
             }
             flash('اتحفظت القاعدة ✅' . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
@@ -337,7 +371,7 @@ case 'logs':
       <?php foreach ($rows as $r): ?>
         <tr><td style="white-space:nowrap"><?= h(fmt_time($r['created_at'])) ?></td><td><?= h($names[$r['page_id']] ?? $r['page_id']) ?></td><td><?= h($r['from_name'] ?: '—') ?></td>
         <td><div class="clip"><?= h($r['message']) ?></div><?php if ($r['error']): ?><div class="muted" style="color:var(--bad)"><?= h($r['error']) ?></div><?php endif; ?></td>
-        <td><?= status_badge($r['comment_status']) ?></td><td><?= status_badge($r['dm_status']) ?></td></tr>
+        <td><?= status_badge($r['comment_status']) ?></td><td><?= status_badge($r['dm_status']) . images_badge($r['images_status'] ?? null) ?></td></tr>
       <?php endforeach; ?></table>
       <?php endif; ?>
     </div>
@@ -387,6 +421,7 @@ case 'page':
             <?= (int)$r['send_dm'] === 1 ? ' ✉️ رسالة خاصة (' . count(variants($r['dm_messages'])) . ' صيغة)' : '' ?>
             <?= (int)($r['mention_user'] ?? 0) === 1 ? ' 🏷️ منشن' : '' ?>
             <?= variants($r['fallback_replies'] ?? '') ? ' 🔁 رد بديل' : '' ?>
+            <?= ($n = count(rule_images($r))) ? ' 🖼️ ' . $n . ' صور' : '' ?>
           </div>
         </div>
       <?php endforeach; ?>
@@ -395,7 +430,7 @@ case 'page':
       <h2>آخر الردود على الصفحة</h2>
       <?php if (!$logs): ?><p class="muted">لسه مفيش.</p><?php else: ?>
       <table><tr><th>الوقت</th><th>صاحب الكومنت</th><th>الكومنت</th><th>كومنت</th><th>رسالة</th></tr>
-      <?php foreach ($logs as $l): ?><tr><td style="white-space:nowrap"><?= h(fmt_time($l['created_at'])) ?></td><td><?= h($l['from_name'] ?: '—') ?></td><td><div class="clip"><?= h($l['message']) ?></div><?php if ($l['error']): ?><div class="muted" style="color:var(--bad)"><?= h($l['error']) ?></div><?php endif; ?></td><td><?= status_badge($l['comment_status']) ?></td><td><?= status_badge($l['dm_status']) ?></td></tr><?php endforeach; ?>
+      <?php foreach ($logs as $l): ?><tr><td style="white-space:nowrap"><?= h(fmt_time($l['created_at'])) ?></td><td><?= h($l['from_name'] ?: '—') ?></td><td><div class="clip"><?= h($l['message']) ?></div><?php if ($l['error']): ?><div class="muted" style="color:var(--bad)"><?= h($l['error']) ?></div><?php endif; ?></td><td><?= status_badge($l['comment_status']) ?></td><td><?= status_badge($l['dm_status']) . images_badge($l['images_status'] ?? null) ?></td></tr><?php endforeach; ?>
       </table><?php endif; ?>
     </div>
     <?php bottom(); break;
@@ -467,11 +502,11 @@ case 'rule':
     $pg = get_page((string)($_GET['page'] ?? ''));
     if (!$pg) redirect('?');
     $id = (int)($_GET['id'] ?? 0);
-    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0];
+    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => ''];
     if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = fetch_one($st) ?: $r; }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
-        foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
+        foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies', 'images_button'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
         $r['post_id'] = ($draft['scope'] ?? 'post') === 'post' ? (($draft['post_manual'] ?? '') ?: ($draft['post_id'] ?? '')) : '';
         $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0;
     }
@@ -490,7 +525,7 @@ case 'rule':
     top($id ? 'تعديل قاعدة' : 'قاعدة جديدة'); ?>
     <p><a href="?p=page&id=<?= urlencode($pg['id']) ?>">→ <?= h($pg['name']) ?></a></p>
     <h1><?= $id ? 'تعديل قاعدة رد' : 'قاعدة رد جديدة' ?></h1>
-    <form method="post" id="rf"><?= csrf_field() ?>
+    <form method="post" id="rf" enctype="multipart/form-data"><?= csrf_field() ?>
       <input type="hidden" name="a" value="rule_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="page_id" value="<?= h($pg['id']) ?>">
       <input type="hidden" name="post_label" id="post_label" value="<?= h($r['post_label']) ?>">
 
@@ -531,6 +566,20 @@ case 'rule':
         <textarea name="comment_replies" placeholder="تم إرسال التفاصيل في الرسائل يا {name} ❤️&#10;---&#10;بعتنالك كل التفاصيل على الخاص 🙏"><?= h($r['comment_replies']) ?></textarea>
         <label class="opt" style="margin-top:14px"><input type="checkbox" name="send_dm" <?= (int)$r['send_dm'] === 1 ? 'checked' : '' ?>><div><strong>✉️ رسالة خاصة على الماسنجر</strong><div class="muted">بتتبعت مرة واحدة لكل كومنت، وفي خلال 7 أيام من الكومنت</div></div></label>
         <textarea name="dm_messages" placeholder="أهلاً {name} 👋&#10;السعر ... والتوصيل ...&#10;للحجز ابعت رقم موبايلك"><?= h($r['dm_messages']) ?></textarea>
+        <?php $curImgs = $draft ? array_values(array_filter((array)($draft['keep_images'] ?? []), 'is_string')) : rule_images($r); ?>
+        <div style="margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:12px">
+          <strong>🖼️ صور مع الرسالة الخاصة (لحد 10)</strong>
+          <p class="muted" style="margin:4px 0 10px">فيسبوك بيسمح برسالة واحدة بس على الكومنت لحد ما الشخص يرد، فالرسالة هتوصله ومعاها زرار، وأول ما يدوس عليه أو يرد بأي حاجة الصور بتتبعتله على طول.</p>
+          <?php if ($curImgs): ?><div class="row" style="margin-bottom:10px">
+            <?php foreach ($curImgs as $u): ?><label style="position:relative;display:inline-block">
+              <img src="<?= h($u) ?>" alt="" style="width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">
+              <span style="position:absolute;bottom:4px;right:4px;background:var(--card);border-radius:6px;padding:0 4px;font-size:12px"><input type="checkbox" name="keep_images[]" value="<?= h($u) ?>" checked> تفضل</span>
+            </label><?php endforeach; ?>
+          </div><p class="muted">شيل العلامة من أي صورة عشان تتمسح.</p><?php endif; ?>
+          <input type="file" name="images[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+          <label class="f">كلام زرار الصور</label>
+          <input type="text" name="images_button" maxlength="20" value="<?= h($r['images_button'] ?? '') ?>" placeholder="📸 شوف الصور">
+        </div>
         <label class="opt" style="margin-top:14px"><input type="checkbox" name="mention_user" <?= (int)($r['mention_user'] ?? 0) === 1 ? 'checked' : '' ?>><div><strong>🏷️ اعمل منشن لصاحب الكومنت في الرد</strong><div class="muted">لو فيسبوك رفض المنشن، الرد بيتبعت من غيره</div></div></label>
         <label class="f">🔁 رد بديل لو الرسالة الخاصة موصلتش (اختياري)</label>
         <textarea name="fallback_replies" placeholder="السعر 1500 جنيه ✅ والتوصيل لكل المحافظات 🚚&#10;---&#10;أهلاً {name}، السعر 1500 جنيه وللطلب كلمنا على 01xxxxxxxxx"><?= h($r['fallback_replies'] ?? '') ?></textarea>
