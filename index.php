@@ -40,7 +40,21 @@ label.f{display:block;font-weight:600;margin:14px 0 6px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
 .flash{padding:10px 14px;border-radius:10px;margin-bottom:12px;font-weight:600}.flash.ok{background:var(--okbg);color:var(--ok)}.flash.err{background:var(--badbg);color:var(--bad)}
-.badge{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12.5px;font-weight:700;background:var(--acc2);color:var(--acc)}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;line-height:1.6;white-space:nowrap;background:var(--acc2);color:var(--acc)}
+td.st{white-space:nowrap;width:1%}td.st .badge{display:block;width:max-content;margin:0 0 4px}
+td.msg{min-width:160px}
+@media (max-width:700px){
+  .tbl{overflow:visible}
+  table.log,table.log tbody,table.log tr,table.log td{display:block;width:auto}
+  table.log tr.hd{display:none}
+  table.log tr{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--card)}
+  table.log td{border:0;padding:2px 0;min-width:0}
+  table.log td.when{display:inline-block;color:var(--mute);font-size:12.5px;margin-left:12px}
+  table.log td.who{font-weight:700}
+  table.log td.st{display:inline-flex;align-items:center;gap:6px;margin:6px 0 0 14px;vertical-align:top}
+  table.log td.st::before{content:attr(data-l);color:var(--mute);font-size:12.5px}
+  table.log td.st .badge{display:inline-block;margin:0}
+}
 .badge.ok{background:var(--okbg);color:var(--ok)}.badge.bad{background:var(--badbg);color:var(--bad)}.badge.off{background:var(--line);color:var(--mute)}.badge.warn{background:var(--warnbg);color:var(--warn)}
 .pg{display:flex;gap:12px;align-items:center}.pg img{width:46px;height:46px;border-radius:50%;object-fit:cover;background:var(--line)}
 .steps{list-style:none;padding:0;margin:0}.steps li{padding:8px 0;border-bottom:1px dashed var(--line);display:flex;gap:10px;align-items:flex-start}.steps li:last-child{border:0}
@@ -85,9 +99,20 @@ function images_badge(?string $s): string {
 }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'فيسبوك رفض (أقدم من 7 أيام)'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'retry' => ['warn', 'هيتعاد لوحده'], 'already' => ['off', 'اتبعتله قبل كده'], 'closed' => ['warn', 'رسايله مقفولة']];
-    [$c, $t] = $map[$s] ?? ['off', $s];
-    return '<span class="badge ' . $c . '">' . $t . '</span>';
+    // short label on the badge, full explanation on hover/long-press
+    $map = [
+        'sent'     => ['ok',   'اتبعت',          'اتبعت بنجاح'],
+        'failed'   => ['bad',  'فشل',            'فشل — السبب مكتوب تحت الكومنت'],
+        'skipped'  => ['off',  '—',              'مش مطلوب في القاعدة'],
+        'expired'  => ['warn', 'فات 7 أيام',     'فيسبوك رفض الرسالة الخاصة لأن الكومنت أقدم من 7 أيام'],
+        'pending'  => ['warn', 'جاري',           'جاري الإرسال'],
+        'fallback' => ['ok',   'رد بديل',        'اتكتب الرد البديل في الكومنت'],
+        'retry'    => ['warn', 'هيتعاد',         'خطأ مؤقت — هيتعاد لوحده'],
+        'already'  => ['off',  'اتبعت قبل كده',  'الكومنت ده كانت وصلته رسالة خاصة قبل كده'],
+        'closed'   => ['warn', 'رسايله مقفولة',  'الشخص ده مانع رسايل الصفحة'],
+    ];
+    [$c, $t, $tip] = $map[$s] ?? ['off', $s, $s];
+    return '<span class="badge ' . $c . '" title="' . h($tip) . '">' . $t . '</span>';
 }
 
 /** Validate and store uploaded photos in /uploads, appending their public URLs to $imgs. Returns an error text or null. */
@@ -374,11 +399,11 @@ case 'logs':
     <div class="card tbl">
       <?php if (!$rows): ?><p class="muted">لسه مفيش ردود. أول ما حد يعلّق على بوست عليه قاعدة هيظهر هنا.</p>
       <?php else: ?>
-      <table><tr><th>الوقت</th><th>الصفحة</th><th>صاحب الكومنت</th><th>الكومنت</th><th>رد الكومنت</th><th>الرسالة الخاصة</th></tr>
+      <table class="log"><tr class="hd"><th>الوقت</th><th>الصفحة</th><th>صاحب الكومنت</th><th>الكومنت</th><th>رد الكومنت</th><th>الرسالة الخاصة</th></tr>
       <?php foreach ($rows as $r): ?>
-        <tr><td style="white-space:nowrap"><?= h(fmt_time($r['created_at'])) ?></td><td><?= h($names[$r['page_id']] ?? $r['page_id']) ?></td><td><?= h($r['from_name'] ?: '—') ?></td>
-        <td><div class="clip"><?= h($r['message']) ?></div><?php if ($r['error']): ?><div class="muted" style="color:var(--bad)"><?= h($r['error']) ?></div><?php endif; ?></td>
-        <td><?= status_badge($r['comment_status']) ?></td><td><?= status_badge($r['dm_status']) . images_badge($r['images_status'] ?? null) ?></td></tr>
+        <tr><td class="when" style="white-space:nowrap"><?= h(fmt_time($r['created_at'])) ?></td><td class="when"><?= h($names[$r['page_id']] ?? $r['page_id']) ?></td><td class="who"><?= h($r['from_name'] ?: '—') ?></td>
+        <td class="msg"><div class="clip"><?= h($r['message']) ?></div><?php if ($r['error']): ?><div class="muted" style="color:var(--bad)"><?= h($r['error']) ?></div><?php endif; ?></td>
+        <td class="st" data-l="كومنت"><?= status_badge($r['comment_status']) ?></td><td class="st" data-l="رسالة"><?= status_badge($r['dm_status']) . images_badge($r['images_status'] ?? null) ?></td></tr>
       <?php endforeach; ?></table>
       <?php endif; ?>
     </div>
@@ -436,8 +461,8 @@ case 'page':
     <div class="card tbl">
       <h2>آخر الردود على الصفحة</h2>
       <?php if (!$logs): ?><p class="muted">لسه مفيش.</p><?php else: ?>
-      <table><tr><th>الوقت</th><th>صاحب الكومنت</th><th>الكومنت</th><th>كومنت</th><th>رسالة</th></tr>
-      <?php foreach ($logs as $l): ?><tr><td style="white-space:nowrap"><?= h(fmt_time($l['created_at'])) ?></td><td><?= h($l['from_name'] ?: '—') ?></td><td><div class="clip"><?= h($l['message']) ?></div><?php if ($l['error']): ?><div class="muted" style="color:var(--bad)"><?= h($l['error']) ?></div><?php endif; ?></td><td><?= status_badge($l['comment_status']) ?></td><td><?= status_badge($l['dm_status']) . images_badge($l['images_status'] ?? null) ?></td></tr><?php endforeach; ?>
+      <table class="log"><tr class="hd"><th>الوقت</th><th>صاحب الكومنت</th><th>الكومنت</th><th>كومنت</th><th>رسالة</th></tr>
+      <?php foreach ($logs as $l): ?><tr><td class="when" style="white-space:nowrap"><?= h(fmt_time($l['created_at'])) ?></td><td class="who"><?= h($l['from_name'] ?: '—') ?></td><td class="msg"><div class="clip"><?= h($l['message']) ?></div><?php if ($l['error']): ?><div class="muted" style="color:var(--bad)"><?= h($l['error']) ?></div><?php endif; ?></td><td class="st" data-l="كومنت"><?= status_badge($l['comment_status']) ?></td><td class="st" data-l="رسالة"><?= status_badge($l['dm_status']) . images_badge($l['images_status'] ?? null) ?></td></tr><?php endforeach; ?>
       </table><?php endif; ?>
     </div>
     <?php bottom(); break;
@@ -465,7 +490,7 @@ case 'backfill':
       <h2 style="margin:18px 0 6px">✉️ الرسالة الخاصة</h2>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
         <div><div class="muted">اتبعتت</div><div class="stat" id="d_sent" style="color:var(--ok)">0</div></div>
-        <div><div class="muted">فيسبوك رفض (أقدم من 7 أيام)</div><div class="stat" id="d_expired" style="color:var(--warn)">0</div></div>
+        <div><div class="muted">فات 7 أيام (فيسبوك رفض)</div><div class="stat" id="d_expired" style="color:var(--warn)">0</div></div>
         <div><div class="muted">اتبعتله قبل كده</div><div class="stat" id="d_already">0</div></div>
         <div><div class="muted">رسايله مقفولة</div><div class="stat" id="d_closed" style="color:var(--warn)">0</div></div>
         <div><div class="muted">هتتعاد لوحدها</div><div class="stat" id="d_retry">0</div></div>
