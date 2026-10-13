@@ -205,7 +205,14 @@ if (in_array($a, ['job_start', 'job_pause', 'job_status'], true)) {
     }
     $job = job_for_rule($ruleId);
     $ws = setting('worker_seen');
-    echo json_encode(['job' => $job, 'worker_ok' => $ws && (time() - strtotime($ws . ' UTC')) < 180], JSON_UNESCAPED_UNICODE);
+    // what happened to the private replies of the comments handled since this run started
+    $dm = ['sent' => 0, 'expired' => 0, 'already' => 0, 'closed' => 0, 'failed' => 0, 'retry' => 0];
+    if ($job) {
+        $q = db()->prepare("SELECT dm_status, COUNT(*) c FROM log WHERE rule_id = ? AND created_at >= ? GROUP BY dm_status");
+        $q->execute([$ruleId, $job['created_at']]);
+        foreach ($q->fetchAll() as $row) if (isset($dm[$row['dm_status']])) $dm[$row['dm_status']] = (int)$row['c'];
+    }
+    echo json_encode(['job' => $job, 'dm' => $dm, 'worker_ok' => $ws && (time() - strtotime($ws . ' UTC')) < 180], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -455,6 +462,15 @@ case 'backfill':
         <div><div class="muted">مش مطابقة</div><div class="stat" id="s_nomatch">0</div></div>
         <div><div class="muted">فيها مشكلة</div><div class="stat" id="s_fail">0</div></div>
       </div>
+      <h2 style="margin:18px 0 6px">✉️ الرسالة الخاصة</h2>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+        <div><div class="muted">اتبعتت</div><div class="stat" id="d_sent" style="color:var(--ok)">0</div></div>
+        <div><div class="muted">فيسبوك رفض (أقدم من 7 أيام)</div><div class="stat" id="d_expired" style="color:var(--warn)">0</div></div>
+        <div><div class="muted">اتبعتله قبل كده</div><div class="stat" id="d_already">0</div></div>
+        <div><div class="muted">رسايله مقفولة</div><div class="stat" id="d_closed" style="color:var(--warn)">0</div></div>
+        <div><div class="muted">هتتعاد لوحدها</div><div class="stat" id="d_retry">0</div></div>
+        <div><div class="muted">فشلت</div><div class="stat" id="d_failed" style="color:var(--bad)">0</div></div>
+      </div>
       <p id="err" class="muted" style="color:var(--bad)"></p>
       <p id="warn" class="muted" style="color:var(--warn)"></p>
       <div class="row" style="margin-top:10px">
@@ -479,6 +495,7 @@ case 'backfill':
         $('warn').textContent = (!j.worker_ok && job && job.status==='running') ? 'لو الأرقام مش بتتحرك خلال دقيقتين، المهمة المجدولة على السيرفر لسه ما اشتغلتش.' : '';
         if(!job){ $('state').textContent='لسه ما بدأش'; $('go').style.display=''; $('go').textContent='ابدأ'; $('pause').style.display='none'; $('restart').style.display='none'; return; }
         for(const k of ['seen','done','dup','nomatch','fail']) $('s_'+k).textContent=job[k]||0;
+        if(j.dm) for(const k in j.dm){ const el=$('d_'+k); if(el) el.textContent=j.dm[k]; }
         $('state').textContent=labels[job.status]||job.status;
         $('err').textContent = job.error||'';
         const running = job.status==='running';
