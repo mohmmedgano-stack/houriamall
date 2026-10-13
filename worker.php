@@ -44,6 +44,15 @@ if (setting('subs_version', '') !== PAGE_FIELDS) {
     }, 'subscribe');
 }
 
+// one-time cleanup: old rows that showed "Activity already replied to" as an error
+if (setting('fix_10900', '') === '') {
+    $safe(function () {
+        db_run("UPDATE log SET dm_status = 'already', error = '' WHERE dm_status = 'failed' AND error LIKE '%(#10900)%' AND error NOT LIKE '%كومنت:%'");
+        db_run("UPDATE log SET dm_status = 'already' WHERE dm_status = 'failed' AND error LIKE '%(#10900)%'");
+        set_setting('fix_10900', '1');
+    }, 'fix10900');
+}
+
 $deadline = time() + 50;
 
 $safe(fn() => retry_due(10), 'retry');

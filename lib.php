@@ -363,7 +363,10 @@ function deliver(array $page, array $rule, array $row): array {
                 'recipient' => json_encode(['comment_id' => $commentId]),
                 'message'   => json_encode($msg, JSON_UNESCAPED_UNICODE),
             ], $page['token']);
-            if (!gerr($r)) {
+            if ((int)($r['error']['code'] ?? 0) === 10900) {
+                // a private reply already went to this comment (from us earlier, Meta automations or another tool) → nothing to do
+                $ds = 'already';
+            } elseif (!gerr($r)) {
                 $ds = 'sent';
                 if (!empty($r['recipient_id'])) {
                     db_run('UPDATE log SET psid = ?, images_status = ? WHERE comment_id = ?',

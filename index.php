@@ -85,7 +85,7 @@ function images_badge(?string $s): string {
 }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'already' => ['off', 'مترد عليه قبل كده'], 'retry' => ['warn', 'هيتعاد لوحده']];
+    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'retry' => ['warn', 'هيتعاد لوحده'], 'already' => ['off', 'اتبعتله قبل كده']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
 }
