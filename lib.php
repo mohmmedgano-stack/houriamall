@@ -363,7 +363,12 @@ function deliver(array $page, array $rule, array $row): array {
                 'recipient' => json_encode(['comment_id' => $commentId]),
                 'message'   => json_encode($msg, JSON_UNESCAPED_UNICODE),
             ], $page['token']);
-            if ((int)($r['error']['code'] ?? 0) === 10900) {
+            $ecode = (int)($r['error']['code'] ?? 0);
+            if (in_array($ecode, [551, 10903, 2018108], true)) {
+                // Meta won't let this person receive a private reply (messages closed, blocked the page, commented as a page…)
+                $ds = 'closed';
+                $errors[] = 'رسالة: الشخص ده مينفعش يوصله رسايل خاصة من الصفحة (' . $ecode . ')';
+            } elseif ($ecode === 10900) {
                 // a private reply already went to this comment (from us earlier, Meta automations or another tool) → nothing to do
                 $ds = 'already';
             } elseif (!gerr($r)) {
@@ -383,7 +388,7 @@ function deliver(array $page, array $rule, array $row): array {
 
     // 2) public reply — waits while the DM is still being retried, so we know if the fallback is needed
     if ($ds !== 'retry' && in_array($cs, ['pending', 'retry'], true)) {
-        $fallback = in_array($ds, ['failed', 'expired'], true) ? pick($rule['fallback_replies'] ?? '') : null;
+        $fallback = in_array($ds, ['failed', 'expired', 'closed'], true) ? pick($rule['fallback_replies'] ?? '') : null;
         $txt = $fallback ?: (((int)$rule['send_comment'] === 1) ? pick($rule['comment_replies']) : null);
         if (!$txt) $cs = 'skipped';
         else {
@@ -442,7 +447,7 @@ function handle_fetched_comment(array $pg, string $postId, array $cm): string {
         isset($cm['created_time']) ? strtotime($cm['created_time']) : null, (string)($cm['from']['id'] ?? ''));
     if ($out['status'] === 'duplicate') return 'dup';
     if ($out['status'] === 'no_rule') return 'nomatch';
-    if (($out['comment'] ?? '') === 'failed' && ($out['dm'] ?? '') !== 'sent') return 'fail';
+    if (($out['comment'] ?? '') === 'failed' && !in_array($out['dm'] ?? '', ['sent', 'already'], true)) return 'fail';
     return 'done';
 }
 
