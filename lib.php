@@ -350,8 +350,8 @@ function deliver(array $page, array $rule, array $row): array {
     if (in_array($ds, ['pending', 'retry'], true)) {
         $txt = ((int)$rule['send_dm'] === 1) ? pick($rule['dm_messages']) : null;
         if (!$txt) $ds = 'skipped';
-        elseif ($ts && (time() - $ts) > (7 * 86400 - 600)) $ds = 'expired';
         else {
+            // no local 7-day cut-off any more: always try, and let Meta decide (it sometimes still accepts)
             $msg = ['text' => personalize($txt, $fromName)];
             $imgs = rule_images($rule);
             if ($imgs) {
@@ -364,7 +364,11 @@ function deliver(array $page, array $rule, array $row): array {
                 'message'   => json_encode($msg, JSON_UNESCAPED_UNICODE),
             ], $page['token']);
             $ecode = (int)($r['error']['code'] ?? 0);
-            if (in_array($ecode, [551, 10903, 2018108], true)) {
+            $old = $ts && (time() - $ts) > 7 * 86400;
+            if (gerr($r) && $old && retry_delay($r, 1) === null && $ecode !== 10900) {
+                // older than 7 days and Meta refused → that's the 7-day rule, use the fallback/public reply
+                $ds = 'expired';
+            } elseif (in_array($ecode, [551, 10903, 2018108], true)) {
                 // Meta won't let this person receive a private reply (messages closed, blocked the page, commented as a page…)
                 $ds = 'closed';
                 $errors[] = 'رسالة: الشخص ده مينفعش يوصله رسايل خاصة من الصفحة (' . $ecode . ')';

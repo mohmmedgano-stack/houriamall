@@ -85,7 +85,7 @@ function images_badge(?string $s): string {
 }
 
 function status_badge(string $s): string {
-    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'عدّى 7 أيام'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'retry' => ['warn', 'هيتعاد لوحده'], 'already' => ['off', 'اتبعتله قبل كده'], 'closed' => ['warn', 'رسايله مقفولة']];
+    $map = ['sent' => ['ok', 'اتبعت'], 'failed' => ['bad', 'فشل'], 'skipped' => ['off', '—'], 'expired' => ['warn', 'فيسبوك رفض (أقدم من 7 أيام)'], 'pending' => ['warn', 'جاري'], 'fallback' => ['ok', 'رد بديل'], 'retry' => ['warn', 'هيتعاد لوحده'], 'already' => ['off', 'اتبعتله قبل كده'], 'closed' => ['warn', 'رسايله مقفولة']];
     [$c, $t] = $map[$s] ?? ['off', $s];
     return '<span class="badge ' . $c . '">' . $t . '</span>';
 }
@@ -564,7 +564,7 @@ case 'rule':
         <h2>٣. الرد</h2>
         <label class="opt"><input type="checkbox" name="send_comment" <?= (int)$r['send_comment'] === 1 ? 'checked' : '' ?>><div><strong>💬 رد على الكومنت (علني)</strong></div></label>
         <textarea name="comment_replies" placeholder="تم إرسال التفاصيل في الرسائل يا {name} ❤️&#10;---&#10;بعتنالك كل التفاصيل على الخاص 🙏"><?= h($r['comment_replies']) ?></textarea>
-        <label class="opt" style="margin-top:14px"><input type="checkbox" name="send_dm" <?= (int)$r['send_dm'] === 1 ? 'checked' : '' ?>><div><strong>✉️ رسالة خاصة على الماسنجر</strong><div class="muted">بتتبعت مرة واحدة لكل كومنت، وفي خلال 7 أيام من الكومنت</div></div></label>
+        <label class="opt" style="margin-top:14px"><input type="checkbox" name="send_dm" <?= (int)$r['send_dm'] === 1 ? 'checked' : '' ?>><div><strong>✉️ رسالة خاصة على الماسنجر</strong><div class="muted">بتتبعت مرة واحدة لكل كومنت. لو الكومنت أقدم من 7 أيام الأداة بتحاول برضه، ولو فيسبوك رفض بيتكتب الرد العادي أو البديل في الكومنت</div></div></label>
         <textarea name="dm_messages" placeholder="أهلاً {name} 👋&#10;السعر ... والتوصيل ...&#10;للحجز ابعت رقم موبايلك"><?= h($r['dm_messages']) ?></textarea>
         <?php $curImgs = $draft ? array_values(array_filter((array)($draft['keep_images'] ?? []), 'is_string')) : rule_images($r); ?>
         <div style="margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:12px">

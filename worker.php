@@ -54,6 +54,14 @@ if (setting('fix_10900', '') !== '2') {
     }, 'fix10900');
 }
 
+// one-time: comments that were skipped earlier only because they were older than 7 days → try the private reply now
+if (setting('retry_expired', '') !== '1') {
+    $safe(function () {
+        db_run("UPDATE log SET dm_status = 'retry', next_retry = datetime('now'), attempts = 0 WHERE dm_status = 'expired' AND created_at > datetime('now', '-30 days')");
+        set_setting('retry_expired', '1');
+    }, 'retry_expired');
+}
+
 $deadline = time() + 50;
 
 $safe(fn() => retry_due(10), 'retry');
