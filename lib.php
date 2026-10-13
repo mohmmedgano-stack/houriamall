@@ -212,7 +212,7 @@ function import_pages(string $userToken): array {
     return ['count' => $count];
 }
 
-const PAGE_FIELDS = 'feed,messages,messaging_postbacks';
+const PAGE_FIELDS = 'feed,messages,messaging_postbacks,standby';
 
 /** Register the app-level webhook (Page → feed + messages) pointing at this install. */
 function subscribe_app_webhook(): ?string {
@@ -559,7 +559,7 @@ function send_pending_images(array $page, string $psid, ?string $commentId = nul
     $st = db()->prepare('SELECT * FROM rules WHERE id = ?'); $st->execute([(int)$row['rule_id']]);
     $rule = fetch_one($st);
     $imgs = $rule ? rule_images($rule) : [];
-    $sent = 0; $errs = [];
+    $sent = 0; $errs = []; $tookControl = false;
     foreach (array_slice($imgs, 0, 10) as $url) {
         $r = graph('POST', $page['id'] . '/messages', [
             'recipient' => json_encode(['id' => $psid]),
@@ -572,6 +572,15 @@ function send_pending_images(array $page, string $psid, ?string $commentId = nul
                 'recipient' => json_encode(['id' => $psid]), 'messaging_type' => 'RESPONSE',
                 'message' => json_encode(['attachment' => ['type' => 'image', 'payload' => ['url' => $url, 'is_reusable' => true]]]),
             ], $page['token']); }
+        }
+        if (gerr($r) && !$tookControl) {
+            // another bot (e.g. Meta Business AI) owns the conversation → take it over for this person, then retry
+            $tookControl = true;
+            graph('POST', $page['id'] . '/take_thread_control', ['recipient' => json_encode(['id' => $psid]), 'metadata' => 'autoreply photos'], $page['token']);
+            $r = graph('POST', $page['id'] . '/messages', [
+                'recipient' => json_encode(['id' => $psid]), 'messaging_type' => 'RESPONSE',
+                'message' => json_encode(['attachment' => ['type' => 'image', 'payload' => ['url' => $url, 'is_reusable' => true]]]),
+            ], $page['token']);
         }
         if (gerr($r)) $errs[] = 'صورة: ' . gerr($r); else $sent++;
     }

@@ -47,7 +47,8 @@ foreach ($data['entry'] ?? [] as $entry) {
     if (!$page || (int)$page['active'] !== 1) continue;
 
     // someone wrote to the page or tapped "see photos" → send the photos we promised
-    foreach ($entry['messaging'] ?? [] as $ev) {
+    // 'standby' = messages that reached us while another app/bot (e.g. Meta Business AI) owns the chat
+    foreach (array_merge($entry['messaging'] ?? [], $entry['standby'] ?? []) as $ev) {
         if (!empty($ev['message']['is_echo'])) continue;
         $psid = (string)($ev['sender']['id'] ?? '');
         if ($psid === '' || $psid === $pageId) continue;
