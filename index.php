@@ -274,7 +274,13 @@ if ($a) {
             redirect('?p=settings');
 
         case 'import_token':
-            $res = import_pages((string)($_POST['token'] ?? ''));
+            $tok = trim((string)($_POST['token'] ?? ''));
+            if (preg_match('/^\d{6,25}$/', $tok)) {
+                // that's a Login Configuration ID, not a token → save it where it belongs and start the normal connect flow
+                set_setting('login_config_id', $tok);
+                redirect('oauth.php');
+            }
+            $res = import_pages($tok);
             isset($res['error']) ? flash('فشل: ' . $res['error'], 'err') : flash('تم ربط ' . $res['count'] . ' صفحة ✅');
             redirect('?');
 
@@ -675,10 +681,10 @@ default:
       <h1 style="margin:0">صفحاتك</h1>
       <a class="btn <?= $appReady ? '' : 'sec' ?>" href="<?= $appReady ? 'oauth.php' : '?p=settings' ?>">🔗 <?= $hasPages ? 'تحديث / إضافة صفحات' : 'ربط صفحات فيسبوك' ?></a>
     </div>
-    <details class="card"><summary>ربط بتوكن (بديل لو زرار الربط مش شغال)</summary>
+    <details class="card"><summary>ربط بتوكن أو Configuration ID (بديل لو زرار الربط مش شغال)</summary>
       <p class="muted">هات User Access Token من Graph API Explorer بالصلاحيات: pages_show_list, pages_read_engagement, pages_read_user_content, pages_manage_engagement, pages_manage_metadata, pages_messaging, business_management</p>
       <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="import_token">
-        <textarea name="token" dir="ltr" style="min-height:70px" required placeholder="EAAB..."></textarea>
+        <textarea name="token" dir="ltr" style="min-height:70px" required placeholder="EAAB...  أو رقم الـ Configuration ID"></textarea>
         <div style="margin-top:10px"><button class="btn sec">ربط</button></div></form>
     </details>
 
