@@ -251,6 +251,8 @@ if ($a) {
         case 'save_settings':
             set_setting('app_id', trim((string)($_POST['app_id'] ?? '')));
             if (trim((string)($_POST['app_secret'] ?? '')) !== '') set_setting('app_secret', trim((string)$_POST['app_secret']));
+            $cfg = preg_replace('/\D/', '', (string)($_POST['login_config_id'] ?? ''));
+            set_setting('login_config_id', $cfg);
             $ver = trim((string)($_POST['graph_version'] ?? ''));
             if (preg_match('/^v\d+\.\d+$/', $ver)) set_setting('graph_version', $ver);
             if (setting('app_id') && setting('app_secret')) {
@@ -362,6 +364,8 @@ case 'settings':
       <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="save_settings">
         <label class="f">App ID</label><input type="text" name="app_id" value="<?= h(setting('app_id', '')) ?>" dir="ltr" inputmode="numeric">
         <label class="f">App Secret</label><input type="password" name="app_secret" placeholder="<?= setting('app_secret') ? '•••••••• (محفوظ — سيبه فاضي لو مش هتغيره)' : '' ?>" dir="ltr" autocomplete="off">
+        <label class="f">Login Configuration ID <span class="muted">(من Facebook Login for Business ← Configurations)</span></label>
+        <input type="text" name="login_config_id" value="<?= h(setting('login_config_id', '')) ?>" dir="ltr" inputmode="numeric" placeholder="لو زرار ربط الصفحات بيقول: Facebook Login غير متوفر">
         <label class="f">Graph API Version</label><input type="text" name="graph_version" value="<?= h(graph_version()) ?>" dir="ltr" style="max-width:160px">
         <div style="margin-top:16px"><button class="btn">حفظ وربط الويب هوك</button></div>
       </form>

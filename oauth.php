@@ -18,13 +18,18 @@ if (isset($_GET['error'])) {
 if (!isset($_GET['code'])) {
     $state = bin2hex(random_bytes(16));
     $_SESSION['oauth_state'] = $state;
-    $scope = implode(',', [
-        'pages_show_list', 'pages_read_engagement', 'pages_read_user_content',
-        'pages_manage_engagement', 'pages_manage_metadata', 'pages_messaging', 'business_management',
-    ]);
-    redirect('https://www.facebook.com/' . graph_version() . '/dialog/oauth?' . http_build_query([
-        'client_id' => $appId, 'redirect_uri' => $redirectUri, 'state' => $state, 'scope' => $scope,
-    ]));
+    $params = ['client_id' => $appId, 'redirect_uri' => $redirectUri, 'state' => $state];
+    $configId = trim((string)setting('login_config_id', ''));
+    if ($configId !== '') {
+        // "Facebook Login for Business" apps must use a login configuration instead of a scope list
+        $params += ['config_id' => $configId, 'response_type' => 'code', 'override_default_response_type' => 'true'];
+    } else {
+        $params['scope'] = implode(',', [
+            'pages_show_list', 'pages_read_engagement', 'pages_read_user_content',
+            'pages_manage_engagement', 'pages_manage_metadata', 'pages_messaging', 'business_management',
+        ]);
+    }
+    redirect('https://www.facebook.com/' . graph_version() . '/dialog/oauth?' . http_build_query($params));
 }
 
 if (!hash_equals($_SESSION['oauth_state'] ?? '', (string)($_GET['state'] ?? ''))) {
