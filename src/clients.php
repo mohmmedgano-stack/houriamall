@@ -22,6 +22,7 @@ function client_create(array $in, bool $demo = false): int {
     [$row, $err] = client_from_input($in);
     if ($err) throw new InvalidArgumentException($err);
     $id = db_insert('clients', $row + ['status' => 'active', 'is_demo' => $demo ? 1 : 0, 'created_at' => now()]);
+    unset($GLOBALS['__scope']);   // scope cache must see the new client
     audit('client.create', 'client', $id, ['name' => $row['name']]);
     return $id;
 }
@@ -34,6 +35,7 @@ function client_update(int $id, array $in): void {
 function client_set_status(int $id, string $status): void {
     if (!in_array($status, ['active', 'paused', 'archived'], true)) throw new InvalidArgumentException('حالة غير معروفة');
     db_update('clients', $id, ['status' => $status, 'updated_at' => now()]);
+    unset($GLOBALS['__scope']);
     audit('client.status', 'client', $id, ['status' => $status]);
 }
 /** Delete a client and everything under it (cascade). Only for demo data or explicit owner action. */
