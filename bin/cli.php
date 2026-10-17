@@ -7,6 +7,7 @@
  *   php bin/cli.php sync <ad_account_id> [days]
  *   php bin/cli.php worker            (same as worker.php, verbose)
  *   php bin/cli.php setup-key         (prints the first-run setup key)
+ *   php bin/cli.php status            (health check, missing extensions listed in "ext")
  */
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
@@ -35,6 +36,12 @@ try {
             echo json_encode($s), "\n"; break;
         case 'worker':
             $argv[] = '-v'; require __DIR__ . '/../worker.php'; break;
+        case 'status':   // health check without secrets
+            $ar = ar_status();
+            echo json_encode(['php' => PHP_VERSION, 'ext' => array_values(array_filter(['pdo_sqlite', 'sodium', 'zip', 'mbstring', 'curl', 'simplexml'], fn($e) => !extension_loaded($e))),
+                'db' => is_file(db_path()), 'users' => (int)q_val('SELECT COUNT(*) FROM users'), 'worker_seen' => setting('worker_seen'),
+                'autoreply' => ['connected' => $ar['connected'], 'pages' => $ar['pages'] ?? null, 'active' => $ar['active_pages'] ?? null, 'worker_ok' => $ar['worker_ok'] ?? null]], JSON_UNESCAPED_UNICODE), "\n";
+            break;
         case 'setup-key':
             echo needs_setup() ? setup_key() . "\n" : "setup already done\n"; break;
         default:
