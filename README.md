@@ -40,7 +40,7 @@ php tests/run.php              # الاختبارات
 3. افتح الرابط، واعمل حساب المالك بمفتاح التجهيز (`php bin/cli.php setup-key` أو من ملف `data/setup.key`)، أو من الـ CLI:
    `php bin/cli.php create-user "الاسم" email@x.com 'Password123' owner`
 4. ملف `.htaccess` بيمنع الوصول لـ `src/ views/ data/ lib/ tests/ bin/ docs/`. اتأكد إن `https://DOMAIN/command/data/app.sqlite` بيرجع 404.
-5. PHP 8.1+ بإضافات: `pdo_sqlite, sodium, zip, mbstring, curl, simplexml` (كلها موجودة افتراضياً على Hostinger).
+5. PHP 8.1+ بإضافات: `pdo_sqlite, openssl, zip, mbstring, curl, simplexml` (كلها موجودة افتراضياً على Hostinger).
 
 ## النسخ الاحتياطي
 
@@ -56,7 +56,7 @@ php tests/run.php              # الاختبارات
 4. "عرض الحسابات الإعلانية" ← اربط كل حساب بعميله. المزامنة بتشتغل كل 3 ساعات (آخر 3 أيام عشان تحديثات الإسناد) وأول مرة بتسحب 30 يوم.
 5. الحسابات اللي انت Admin عليها كفاية فيها Standard Access. حسابات ناس تانية محتاجة Advanced Access + App Review.
 
-الأمان: التوكن والـ Secret متشفرين (libsodium) ومفتاحهم في ملف منفصل، وكل طلب بيتبعت بـ `appsecret_proof`، والتوكن مش بيظهر في الواجهة ولا السجلات. الربط **للقراءة فقط** — مفيش أي كود بيعدل حملات أو ميزانيات.
+الأمان: التوكن والـ Secret متشفرين (AES-256-GCM) ومفتاحهم في ملف منفصل، وكل طلب بيتبعت بـ `appsecret_proof`، والتوكن مش بيظهر في الواجهة ولا السجلات. الربط **للقراءة فقط** — مفيش أي كود بيعدل حملات أو ميزانيات.
 
 ## الذكاء الاصطناعي (اختياري)
 

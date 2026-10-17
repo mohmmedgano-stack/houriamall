@@ -38,7 +38,7 @@ try {
             $argv[] = '-v'; require __DIR__ . '/../worker.php'; break;
         case 'status':   // health check without secrets
             $ar = ar_status();
-            echo json_encode(['php' => PHP_VERSION, 'ext' => array_values(array_filter(['pdo_sqlite', 'sodium', 'zip', 'mbstring', 'curl', 'simplexml'], fn($e) => !extension_loaded($e))),
+            echo json_encode(['php' => PHP_VERSION, 'ext' => array_values(array_filter(['pdo_sqlite', 'openssl', 'zip', 'mbstring', 'curl', 'simplexml'], fn($e) => !extension_loaded($e))),
                 'db' => is_file(db_path()), 'users' => (int)q_val('SELECT COUNT(*) FROM users'), 'worker_seen' => setting('worker_seen'),
                 'autoreply' => ['connected' => $ar['connected'], 'pages' => $ar['pages'] ?? null, 'active' => $ar['active_pages'] ?? null, 'worker_ok' => $ar['worker_ok'] ?? null]], JSON_UNESCAPED_UNICODE), "\n";
             break;

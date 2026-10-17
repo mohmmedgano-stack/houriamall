@@ -15,7 +15,7 @@ src/                 all logic (denied over HTTP)
   migrations.php     numbered schema migrations
   auth.php           users, sessions, roles/permissions, login throttle, setup key
   util.php           escaping, CSRF, flash, formatting (money/number/date), pagination
-  crypto.php         libsodium secretbox for integration secrets
+  crypto.php         AES-256-GCM (OpenSSL) for integration secrets
   audit.php          audit_logs
   scope.php          per-user client access + demo/live mode scoping
   metrics.php        pure KPI math (null-safe, currency-safe)

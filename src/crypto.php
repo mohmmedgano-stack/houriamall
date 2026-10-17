@@ -1,28 +1,44 @@
 <?php
 declare(strict_types=1);
+/*
+ * Encryption for integration secrets. Uses libsodium (secretbox) when available, otherwise OpenSSL AES-256-GCM —
+ * some hosts ship PHP CLI without sodium, and the worker must be able to read the same secrets as the web app.
+ * The key lives in data/secret.key (blocked from the web), separate from the database file.
+ */
 
-/** Secret key for encrypting integration credentials. Lives in data/ (blocked from the web), separate from the DB file. */
 function secret_key(): string {
     $f = DATA_DIR . '/secret.key';
     if (!is_file($f)) {
         if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0750, true);
-        file_put_contents($f, base64_encode(sodium_crypto_secretbox_keygen()), LOCK_EX);
+        file_put_contents($f, base64_encode(random_bytes(32)), LOCK_EX);
         @chmod($f, 0600);
     }
     $k = base64_decode(trim((string)file_get_contents($f)), true);
-    if ($k === false || strlen($k) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) throw new RuntimeException('secret.key is damaged');
+    if ($k === false || strlen($k) !== 32) throw new RuntimeException('secret.key is damaged');
     return $k;
 }
 function encrypt_str(string $plain): string {
-    $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-    return 'v1:' . base64_encode($nonce . sodium_crypto_secretbox($plain, $nonce, secret_key()));
+    // v2 (OpenSSL GCM) works everywhere, so new values always use it; v1 (sodium) values stay readable
+    $iv = random_bytes(12); $tag = '';
+    $ct = openssl_encrypt($plain, 'aes-256-gcm', secret_key(), OPENSSL_RAW_DATA, $iv, $tag);
+    if ($ct === false) throw new RuntimeException('encryption failed');
+    return 'v2:' . base64_encode($iv . $tag . $ct);
 }
 function decrypt_str(?string $enc): ?string {
-    if (!$enc || !str_starts_with($enc, 'v1:')) return null;
-    $raw = base64_decode(substr($enc, 3), true);
-    if ($raw === false || strlen($raw) < SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) return null;
-    $out = sodium_crypto_secretbox_open(substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), secret_key());
-    return $out === false ? null : $out;
+    if (!$enc) return null;
+    if (str_starts_with($enc, 'v2:')) {
+        $raw = base64_decode(substr($enc, 3), true);
+        if ($raw === false || strlen($raw) < 29) return null;
+        $out = openssl_decrypt(substr($raw, 28), 'aes-256-gcm', secret_key(), OPENSSL_RAW_DATA, substr($raw, 0, 12), substr($raw, 12, 16));
+        return $out === false ? null : $out;
+    }
+    if (str_starts_with($enc, 'v1:') && function_exists('sodium_crypto_secretbox_open')) {
+        $raw = base64_decode(substr($enc, 3), true);
+        if ($raw === false || strlen($raw) < 24) return null;
+        $out = sodium_crypto_secretbox_open(substr($raw, 24), substr($raw, 0, 24), secret_key());
+        return $out === false ? null : $out;
+    }
+    return null;
 }
 function encrypt_json(array $a): string { return encrypt_str(json_encode($a, JSON_UNESCAPED_UNICODE)); }
 function decrypt_json(?string $enc): array { $s = decrypt_str($enc); $a = $s ? json_decode($s, true) : null; return is_array($a) ? $a : []; }
