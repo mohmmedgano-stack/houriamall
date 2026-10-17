@@ -68,8 +68,8 @@ foreach ($data['entry'] ?? [] as $entry) {
         $parentId  = (string)($v['parent_id'] ?? $postId);
         $fromId    = (string)($v['from']['id'] ?? '');
         if ($postId === '' || $commentId === '') continue;
-        if ($parentId !== $postId) continue;   // only top-level comments, not replies
-        if ($fromId === $pageId) continue;      // never answer the page itself
+        $isReply   = $parentId !== $postId;     // replies are moderated (blocked words) but never auto-answered
+        if ($fromId === $pageId) continue;      // never touch the page itself
 
         try {
             process_comment(
@@ -77,7 +77,7 @@ foreach ($data['entry'] ?? [] as $entry) {
                 (string)($v['from']['name'] ?? ''),
                 (string)($v['message'] ?? ''),
                 isset($v['created_time']) ? (int)$v['created_time'] : null,
-                $fromId
+                $fromId, $isReply
             );
         } catch (Throwable $e) {
             // nothing is lost: the worker's catch-up sweep picks this comment up within ~10 minutes

@@ -47,6 +47,10 @@ function db(): PDO {
         if (!in_array($c, $jcols, true)) $pdo->exec("ALTER TABLE jobs ADD COLUMN $c $t");
     }
     $pdo->exec("CREATE INDEX IF NOT EXISTS log_retry ON log(next_retry)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS blocks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, page_id TEXT DEFAULT '', name TEXT, active INTEGER DEFAULT 1,
+        keywords TEXT, block_links INTEGER DEFAULT 0, block_phones INTEGER DEFAULT 0, block_mentions INTEGER DEFAULT 0,
+        action TEXT DEFAULT 'hide', hits INTEGER DEFAULT 0, created_at TEXT)");
     return $pdo;
 }
 
@@ -320,7 +324,10 @@ function refresh_page_tokens(): void {
  * Reply to one comment according to the matching rule. Idempotent per comment_id.
  * Returns ['status' => no_rule|duplicate|done, ...]
  */
-function process_comment(array $page, string $postId, string $commentId, string $fromName, string $message, ?int $createdTs = null, string $fromId = ''): array {
+function process_comment(array $page, string $postId, string $commentId, string $fromName, string $message, ?int $createdTs = null, string $fromId = '', bool $isReply = false): array {
+    $mod = moderate_comment($page, $postId, $commentId, $fromName, $message, $fromId);
+    if ($mod) return $mod;
+    if ($isReply) return ['status' => 'no_rule'];   // replies are only moderated, never auto-answered
     $rule = find_rule($page['id'], $postId, $message);
     if (!$rule) return ['status' => 'no_rule'];
 
@@ -449,6 +456,7 @@ function handle_fetched_comment(array $pg, string $postId, array $cm): string {
     }
     $out = process_comment($pg, $postId, (string)$cm['id'], (string)($cm['from']['name'] ?? ''), (string)($cm['message'] ?? ''),
         isset($cm['created_time']) ? strtotime($cm['created_time']) : null, (string)($cm['from']['id'] ?? ''));
+    if ($out['status'] === 'blocked') return 'done';
     if ($out['status'] === 'duplicate') return 'dup';
     if ($out['status'] === 'no_rule') return 'nomatch';
     if (($out['comment'] ?? '') === 'failed' && !in_array($out['dm'] ?? '', ['sent', 'already'], true)) return 'fail';
@@ -600,4 +608,69 @@ function send_pending_images(array $page, string $psid, ?string $commentId = nul
     db_run("UPDATE log SET images_status = ?, error = CASE WHEN ? = '' THEN error ELSE TRIM(error || ' | ' || ?, ' |') END WHERE comment_id = ?",
         [$status, implode(' | ', $errs), implode(' | ', $errs), $row['comment_id']]);
     return $sent;
+}
+
+
+/* ---------------- Blocked comments: hide or delete automatically ---------------- */
+function to_latin_digits(string $s): string {
+    return strtr($s, ['٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9',
+                      '۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9']);
+}
+
+/** Which block (if any) this comment falls under. Returns [block row, reason] or null. */
+function find_block(string $pageId, string $message): ?array {
+    $st = db()->prepare("SELECT * FROM blocks WHERE active = 1 AND (page_id = '' OR page_id IS NULL OR page_id = ?) ORDER BY id");
+    $st->execute([$pageId]);
+    $blocks = $st->fetchAll();
+    if (!$blocks) return null;
+    $norm = norm_ar($message);
+    $digits = preg_replace('/[\s\-\.\(\)+]/u', '', to_latin_digits($message)) ?? '';
+    foreach ($blocks as $b) {
+        foreach (keywords_of($b['keywords']) as $k) {
+            if ($k !== '' && mb_strpos($norm, norm_ar($k)) !== false) return [$b, 'كلمة: ' . $k];
+        }
+        if ((int)$b['block_links'] === 1 && preg_match('~(https?://|www\.|wa\.me|bit\.ly|t\.me|\b[a-z0-9-]{2,}\.(com|net|org|me|ly|link|io|co|online|store|shop|site|xyz|info|app|eg)\b)~iu', $message))
+            return [$b, 'لينك'];
+        if ((int)$b['block_phones'] === 1 && preg_match('/\d{8,}/', $digits))
+            return [$b, 'رقم تليفون'];
+        if ((int)$b['block_mentions'] === 1 && preg_match('/@\S/u', $message))
+            return [$b, 'منشن'];
+    }
+    return null;
+}
+
+/** Hide/delete the comment if it matches a block. Returns a process_comment-style result, or null when not blocked. */
+function moderate_comment(array $page, string $postId, string $commentId, string $fromName, string $message, string $fromId): ?array {
+    if ($fromId !== '' && $fromId === (string)$page['id']) return null;   // never touch the page's own comments
+    $hit = find_block((string)$page['id'], $message);
+    if (!$hit) return null;
+    [$b, $reason] = $hit;
+
+    $ins = db_run("INSERT OR IGNORE INTO log (comment_id, page_id, post_id, rule_id, from_name, message, comment_status, dm_status, error, created_at, from_id, attempts)
+        VALUES (?, ?, ?, 0, ?, ?, 'pending', 'skipped', ?, ?, ?, 0)",
+        [$commentId, $page['id'], $postId, $fromName, mb_substr($message, 0, 500), 'محظور (' . $b['name'] . ' — ' . $reason . ')', now(), $fromId]);
+    if ($ins->rowCount() === 0) {
+        // already handled — but if it was auto-replied before the block existed, still hide/delete it now
+        $st = db()->prepare('SELECT comment_status FROM log WHERE comment_id = ?'); $st->execute([$commentId]);
+        if (in_array((string)fetch_col($st), ['hidden', 'deleted'], true)) return ['status' => 'duplicate'];
+        db_run("UPDATE log SET error = ? WHERE comment_id = ?", ['محظور (' . $b['name'] . ' — ' . $reason . ')', $commentId]);
+    }
+
+    $act = $b['action'] === 'delete' ? 'delete' : 'hide';
+    $call = fn() => $act === 'delete'
+        ? graph('DELETE', $commentId, [], $page['token'])
+        : graph('POST', $commentId, ['is_hidden' => 'true'], $page['token']);
+    $r = $call();
+    if (gerr($r) && retry_delay($r, 1) !== null) { usleep(1500000); $r = $call(); }
+    if (gerr($r) && $act === 'delete') {
+        // some comments (e.g. on certain ads) can't be deleted by the page → at least hide them
+        $r2 = graph('POST', $commentId, ['is_hidden' => 'true'], $page['token']);
+        if (!gerr($r2)) { $r = $r2; $act = 'hide'; }
+    }
+    $ok = !gerr($r);
+    $status = $ok ? ($act === 'delete' ? 'deleted' : 'hidden') : 'failed';
+    db_run("UPDATE log SET comment_status = ?, dm_status = 'skipped', next_retry = NULL, error = ? WHERE comment_id = ?",
+        [$status, 'محظور (' . $b['name'] . ' — ' . $reason . ')' . ($ok ? '' : ' | ' . gerr($r)), $commentId]);
+    if ($ok) db_run('UPDATE blocks SET hits = hits + 1 WHERE id = ?', [(int)$b['id']]);
+    return ['status' => 'blocked', 'comment' => $status, 'dm' => 'skipped', 'errors' => $ok ? [] : [gerr($r)]];
 }

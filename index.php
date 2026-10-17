@@ -74,6 +74,7 @@ details summary{cursor:pointer;font-weight:600;color:var(--acc)}
 <header><div class="hwrap"><div class="brand">🤖 Gano <span>Auto Reply</span></div>
 <?php if ($nav): ?><nav>
 <a href="?" class="<?= in_array($cur, ['home', 'page', 'rule', 'backfill'], true) ? 'on' : '' ?>">الصفحات</a>
+<a href="?p=blocks" class="<?= $cur === 'blocks' ? 'on' : '' ?>">المحظور</a>
 <a href="?p=logs" class="<?= $cur === 'logs' ? 'on' : '' ?>">السجل</a>
 <a href="?p=settings" class="<?= $cur === 'settings' ? 'on' : '' ?>">الإعدادات</a>
 <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="a" value="logout"><button class="btn sec sm" style="margin-inline-start:6px">خروج</button></form>
@@ -110,6 +111,8 @@ function status_badge(string $s): string {
         'retry'    => ['warn', 'هيتعاد',         'خطأ مؤقت — هيتعاد لوحده'],
         'already'  => ['off',  'اتبعت قبل كده',  'الكومنت ده كانت وصلته رسالة خاصة قبل كده'],
         'closed'   => ['warn', 'رسايله مقفولة',  'الشخص ده مانع رسايل الصفحة'],
+        'hidden'   => ['bad',  '🚫 اتخفى',       'كومنت محظور — اتخفى (صاحبه وأصحابه بس اللي يشوفوه)'],
+        'deleted'  => ['bad',  '🗑️ اتمسح',       'كومنت محظور — اتمسح'],
     ];
     [$c, $t, $tip] = $map[$s] ?? ['off', $s, $s];
     return '<span class="badge ' . $c . '" title="' . h($tip) . '">' . $t . '</span>';
@@ -340,6 +343,30 @@ if ($a) {
             flash('اتحفظت القاعدة ✅' . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
             redirect('?p=page&id=' . urlencode($pageId));
 
+        case 'block_save':
+            $bid = (int)($_POST['id'] ?? 0);
+            $bp = (string)($_POST['page_id'] ?? '');
+            if ($bp !== '' && !get_page($bp)) $bp = '';
+            $bk = trim((string)($_POST['keywords'] ?? ''));
+            $bl = isset($_POST['block_links']) ? 1 : 0; $bph = isset($_POST['block_phones']) ? 1 : 0; $bm = isset($_POST['block_mentions']) ? 1 : 0;
+            if (!keywords_of($bk) && !$bl && !$bph && !$bm) { flash('اكتب كلمة واحدة على الأقل أو اختار نوع (لينكات / أرقام / منشن)', 'err'); redirect('?p=blocks' . ($bid ? '&edit=' . $bid : '')); }
+            $bn = trim((string)($_POST['name'] ?? '')) ?: 'قائمة حظر';
+            $ba = ($_POST['action'] ?? 'hide') === 'delete' ? 'delete' : 'hide';
+            $vals = [$bp, $bn, isset($_POST['active']) ? 1 : 0, $bk, $bl, $bph, $bm, $ba];
+            if ($bid) db_run('UPDATE blocks SET page_id=?, name=?, active=?, keywords=?, block_links=?, block_phones=?, block_mentions=?, action=? WHERE id=?', array_merge($vals, [$bid]));
+            else db_run('INSERT INTO blocks (page_id, name, active, keywords, block_links, block_phones, block_mentions, action, created_at) VALUES (?,?,?,?,?,?,?,?,?)', array_merge($vals, [now()]));
+            flash('اتحفظت قائمة الحظر ✅ أي كومنت جديد مطابق هيت' . ($ba === 'delete' ? 'مسح' : 'خفى') . ' لوحده');
+            redirect('?p=blocks');
+
+        case 'block_toggle':
+            db_run('UPDATE blocks SET active = 1 - active WHERE id = ?', [(int)($_POST['id'] ?? 0)]);
+            redirect('?p=blocks');
+
+        case 'block_delete':
+            db_run('DELETE FROM blocks WHERE id = ?', [(int)($_POST['id'] ?? 0)]);
+            flash('اتمسحت القائمة');
+            redirect('?p=blocks');
+
         case 'rule_toggle':
             db()->prepare('UPDATE rules SET active = 1 - active WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
             redirect(back_url());
@@ -397,6 +424,77 @@ case 'settings':
       <form method="post" class="row"><?= csrf_field() ?><input type="hidden" name="a" value="change_password">
         <input type="password" name="password" minlength="8" required placeholder="الباسورد الجديد" style="max-width:280px" autocomplete="new-password"><button class="btn sec">تغيير</button>
       </form>
+    </div>
+    <?php bottom(); break;
+
+/* ---------- Blocked comments ---------- */
+case 'blocks':
+    $names = array_column($pages, 'name', 'id');
+    $blocks = db()->query('SELECT * FROM blocks ORDER BY id DESC')->fetchAll();
+    $eid = (int)($_GET['edit'] ?? 0);
+    $e = ['id' => 0, 'page_id' => '', 'name' => '', 'active' => 1, 'keywords' => '', 'block_links' => 0, 'block_phones' => 0, 'block_mentions' => 0, 'action' => 'hide'];
+    foreach ($blocks as $b) if ((int)$b['id'] === $eid) $e = $b;
+    $recent = db()->query("SELECT * FROM log WHERE comment_status IN ('hidden','deleted') OR (comment_status = 'failed' AND error LIKE 'محظور%') ORDER BY created_at DESC LIMIT 30")->fetchAll();
+    top('الكومنتات المحظورة'); ?>
+    <h1>🚫 الكومنتات المحظورة</h1>
+    <p class="muted">أي كومنت جديد (أو رد على كومنت) فيه كلمة من القوايم دي بيتخفى أو يتمسح لوحده في ثواني، ومش بيترد عليه. كومنتات الصفحة نفسها عمرها ما بتتلمس.</p>
+
+    <div class="card">
+      <h2><?= $e['id'] ? 'تعديل قائمة حظر' : '＋ قائمة حظر جديدة' ?></h2>
+      <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="block_save"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+        <label class="f">الصفحة</label>
+        <select name="page_id">
+          <option value="">كل الصفحات</option>
+          <?php foreach ($pages as $pg): ?><option value="<?= h($pg['id']) ?>" <?= $e['page_id'] === $pg['id'] ? 'selected' : '' ?>><?= h($pg['name']) ?></option><?php endforeach; ?>
+        </select>
+        <label class="f">الكلمات المحظورة (افصل بينهم بفاصلة أو سطر جديد)</label>
+        <textarea name="keywords" style="min-height:90px" placeholder="نصب، حرامية، اسم منافس، شتيمة…"><?= h($e['keywords']) ?></textarea>
+        <p class="muted">مش بيفرق بين أ/ا، ة/ه، ى/ي والتشكيل، وبيلقط الكلمة حتى لو جوه كلمة أطول.</p>
+        <label class="opt"><input type="checkbox" name="block_links" <?= (int)$e['block_links'] === 1 ? 'checked' : '' ?>><div><strong>🔗 أي كومنت فيه لينك</strong><div class="muted">مواقع، واتساب wa.me، تليجرام، لينكات مختصرة…</div></div></label>
+        <label class="opt"><input type="checkbox" name="block_phones" <?= (int)$e['block_phones'] === 1 ? 'checked' : '' ?>><div><strong>📞 أي كومنت فيه رقم تليفون</strong><div class="muted">8 أرقام أو أكتر ورا بعض، بالعربي أو الإنجليزي (منافسين بيسيبوا أرقامهم)</div></div></label>
+        <label class="opt"><input type="checkbox" name="block_mentions" <?= (int)$e['block_mentions'] === 1 ? 'checked' : '' ?>><div><strong>🏷️ أي كومنت فيه منشن بـ @</strong></div></label>
+        <label class="f">يعمل إيه في الكومنت؟</label>
+        <label class="opt"><input type="radio" name="action" value="hide" <?= $e['action'] !== 'delete' ? 'checked' : '' ?>><div><strong>إخفاء (مستحسن)</strong><div class="muted">بيختفي من عند الناس كلها، بس صاحبه وأصحابه بيفضلوا شايفينه فمش بيحس إنه اتمسح ويرجع يكتب تاني</div></div></label>
+        <label class="opt"><input type="radio" name="action" value="delete" <?= $e['action'] === 'delete' ? 'checked' : '' ?>><div><strong>مسح نهائي</strong><div class="muted">بيتمسح خالص. لو فيسبوك منع المسح (زي بعض الإعلانات) بيتخفى بدله</div></div></label>
+        <label class="f">اسم القائمة</label><input type="text" name="name" value="<?= h($e['name']) ?>" placeholder="مثلاً: شتايم / منافسين / أرقام">
+        <label class="opt" style="margin-top:12px"><input type="checkbox" name="active" <?= (int)$e['active'] === 1 ? 'checked' : '' ?>><div><strong>شغالة</strong></div></label>
+        <div class="row" style="margin-top:10px"><button class="btn">حفظ</button><?php if ($e['id']): ?><a class="btn sec" href="?p=blocks">إلغاء</a><?php endif; ?></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>القوايم</h2>
+      <?php if (!$blocks): ?><p class="muted">مفيش قوايم لسه.</p><?php endif; ?>
+      <?php foreach ($blocks as $b): $kw = keywords_of($b['keywords']); ?>
+        <div class="rule">
+          <div class="row" style="justify-content:space-between">
+            <div><strong><?= h($b['name']) ?></strong> <?= (int)$b['active'] === 1 ? '<span class="badge ok">شغالة</span>' : '<span class="badge off">واقفة</span>' ?>
+              <span class="badge"><?= $b['action'] === 'delete' ? '🗑️ مسح' : '🚫 إخفاء' ?></span></div>
+            <div class="row">
+              <a class="btn sec sm" href="?p=blocks&edit=<?= (int)$b['id'] ?>">تعديل</a>
+              <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="block_toggle"><input type="hidden" name="id" value="<?= (int)$b['id'] ?>"><button class="btn sec sm"><?= (int)$b['active'] === 1 ? 'إيقاف' : 'تشغيل' ?></button></form>
+              <form method="post" data-confirm="تمسح القائمة دي؟"><?= csrf_field() ?><input type="hidden" name="a" value="block_delete"><input type="hidden" name="id" value="<?= (int)$b['id'] ?>"><button class="btn red sm">مسح</button></form>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:6px">
+            📍 <?= $b['page_id'] ? h($names[$b['page_id']] ?? $b['page_id']) : 'كل الصفحات' ?> ·
+            <?= $kw ? '🔤 ' . count($kw) . ' كلمة' : '' ?><?= (int)$b['block_links'] ? ' · 🔗 لينكات' : '' ?><?= (int)$b['block_phones'] ? ' · 📞 أرقام' : '' ?><?= (int)$b['block_mentions'] ? ' · 🏷️ منشن' : '' ?>
+            · اتعامل مع <strong><?= (int)$b['hits'] ?></strong> كومنت
+          </div>
+          <?php if ($kw): ?><div class="muted clip" style="margin-top:4px"><?= h(implode('، ', $kw)) ?></div><?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="card tbl">
+      <h2>آخر الكومنتات اللي اتحظرت</h2>
+      <?php if (!$recent): ?><p class="muted">لسه مفيش.</p><?php else: ?>
+      <table class="log"><tr class="hd"><th>الوقت</th><th>الصفحة</th><th>صاحب الكومنت</th><th>الكومنت</th><th>الحالة</th></tr>
+      <?php foreach ($recent as $r): ?>
+        <tr><td class="when" style="white-space:nowrap"><?= h(fmt_time($r['created_at'])) ?></td><td class="when"><?= h($names[$r['page_id']] ?? $r['page_id']) ?></td><td class="who"><?= h($r['from_name'] ?: '—') ?></td>
+        <td class="msg"><div class="clip"><?= h($r['message']) ?></div><div class="muted"><?= h($r['error']) ?></div></td>
+        <td class="st" data-l="الحالة"><?= status_badge($r['comment_status']) ?></td></tr>
+      <?php endforeach; ?></table><?php endif; ?>
     </div>
     <?php bottom(); break;
 
