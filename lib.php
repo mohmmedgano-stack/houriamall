@@ -38,6 +38,7 @@ function db(): PDO {
     if (!in_array('fallback_replies', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN fallback_replies TEXT");
     if (!in_array('images', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN images TEXT");
     if (!in_array('images_button', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN images_button TEXT");
+    if (!in_array('like_comment', $cols, true)) $pdo->exec("ALTER TABLE rules ADD COLUMN like_comment INTEGER DEFAULT 0");
     $lcols = array_column($pdo->query('PRAGMA table_info(log)')->fetchAll(), 'name');
     foreach (['from_id' => 'TEXT', 'comment_ts' => 'INTEGER', 'attempts' => 'INTEGER DEFAULT 0', 'next_retry' => 'TEXT', 'psid' => 'TEXT', 'images_status' => 'TEXT'] as $c => $t) {
         if (!in_array($c, $lcols, true)) $pdo->exec("ALTER TABLE log ADD COLUMN $c $t");
@@ -417,6 +418,13 @@ function deliver(array $page, array $rule, array $row): array {
                 $errors[] = 'كومنت: ' . gerr($r);
             }
         }
+    }
+
+    // 3) like the comment (once, best effort — never blocks the replies)
+    if ((int)($rule['like_comment'] ?? 0) === 1 && $wait === null && (int)($row['attempts'] ?? 0) === 0) {
+        $lr = graph('POST', $commentId . '/likes', [], $page['token']);
+        if (gerr($lr) && retry_delay($lr, 1) !== null) { usleep(1000000); $lr = graph('POST', $commentId . '/likes', [], $page['token']); }
+        if (gerr($lr)) $errors[] = 'لايك: ' . gerr($lr);
     }
 
     $next = $wait !== null ? gmdate('Y-m-d H:i:s', time() + $wait) : null;

@@ -324,6 +324,7 @@ if ($a) {
             $imgs = array_values(array_filter((array)($_POST['keep_images'] ?? []), fn($u) => is_string($u) && strpos($u, base_url() . '/uploads/') === 0));
             $upErr = save_uploaded_images($imgs);
             $ib = mb_substr(trim((string)($_POST['images_button'] ?? '')), 0, 20);
+            $lk = isset($_POST['like_comment']) ? 1 : 0;
             $err = null;
             if ($mode === 'keywords' && !keywords_of($kw)) $err = 'اكتب كلمة واحدة على الأقل';
             elseif (!$sc && !$sd) $err = 'لازم تختار رد كومنت أو رسالة خاصة أو الاتنين';
@@ -332,12 +333,12 @@ if ($a) {
             if (!$err && $upErr) $err = $upErr;
             if ($err) { $_SESSION['rule_draft'] = $_POST; flash($err, 'err'); redirect('?p=rule&page=' . urlencode($pageId) . ($id ? '&id=' . $id : '')); }
             $name = trim((string)($_POST['name'] ?? '')) ?: ($postLabel ?: 'كل البوستات');
-            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu, json_encode($imgs, JSON_UNESCAPED_SLASHES), $ib];
+            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu, json_encode($imgs, JSON_UNESCAPED_SLASHES), $ib, $lk];
             if ($id) {
-                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=?, images=?, images_button=? WHERE id=? AND page_id=?')
+                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=?, images=?, images_button=?, like_comment=? WHERE id=? AND page_id=?')
                     ->execute(array_merge($vals, [$id, $pageId]));
             } else {
-                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, like_comment, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute(array_merge($vals, [$pageId, now()]));
             }
             flash('اتحفظت القاعدة ✅' . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
@@ -563,6 +564,7 @@ case 'page':
             <?= (int)$r['send_comment'] === 1 ? '💬 رد كومنت (' . count(variants($r['comment_replies'])) . ' صيغة)' : '' ?>
             <?= (int)$r['send_dm'] === 1 ? ' ✉️ رسالة خاصة (' . count(variants($r['dm_messages'])) . ' صيغة)' : '' ?>
             <?= (int)($r['mention_user'] ?? 0) === 1 ? ' 🏷️ منشن' : '' ?>
+            <?= (int)($r['like_comment'] ?? 0) === 1 ? ' 👍 لايك' : '' ?>
             <?= variants($r['fallback_replies'] ?? '') ? ' 🔁 رد بديل' : '' ?>
             <?= ($n = count(rule_images($r))) ? ' 🖼️ ' . $n . ' صور' : '' ?>
           </div>
@@ -655,13 +657,13 @@ case 'rule':
     $pg = get_page((string)($_GET['page'] ?? ''));
     if (!$pg) redirect('?');
     $id = (int)($_GET['id'] ?? 0);
-    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => ''];
+    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => '', 'like_comment' => 0];
     if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = fetch_one($st) ?: $r; }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
         foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies', 'images_button'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
         $r['post_id'] = ($draft['scope'] ?? 'post') === 'post' ? (($draft['post_manual'] ?? '') ?: ($draft['post_id'] ?? '')) : '';
-        $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0;
+        $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0; $r['like_comment'] = isset($draft['like_comment']) ? 1 : 0;
     }
     $scopeAll = $draft ? (($draft['scope'] ?? 'post') === 'all') : ($id && !$r['post_id']);
 
@@ -733,6 +735,7 @@ case 'rule':
           <label class="f">كلام زرار الصور</label>
           <input type="text" name="images_button" maxlength="20" value="<?= h($r['images_button'] ?? '') ?>" placeholder="📸 شوف الصور">
         </div>
+        <label class="opt" style="margin-top:14px"><input type="checkbox" name="like_comment" <?= (int)($r['like_comment'] ?? 0) === 1 ? 'checked' : '' ?>><div><strong>👍 اعمل لايك على الكومنت</strong><div class="muted">الصفحة بتعمل لايك على كومنت العميل مع الرد (فيسبوك بيسمح باللايك بس، مش باقي الرياكتات)</div></div></label>
         <label class="opt" style="margin-top:14px"><input type="checkbox" name="mention_user" <?= (int)($r['mention_user'] ?? 0) === 1 ? 'checked' : '' ?>><div><strong>🏷️ اعمل منشن لصاحب الكومنت في الرد</strong><div class="muted">لو فيسبوك رفض المنشن، الرد بيتبعت من غيره</div></div></label>
         <label class="f">🔁 رد بديل لو الرسالة الخاصة موصلتش (اختياري)</label>
         <textarea name="fallback_replies" placeholder="السعر 1500 جنيه ✅ والتوصيل لكل المحافظات 🚚&#10;---&#10;أهلاً {name}، السعر 1500 جنيه وللطلب كلمنا على 01xxxxxxxxx"><?= h($r['fallback_replies'] ?? '') ?></textarea>
