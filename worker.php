@@ -5,7 +5,7 @@
  */
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require __DIR__ . '/src/bootstrap.php';
+require_once __DIR__ . '/src/bootstrap.php';
 restore_exception_handler();
 
 $lock = fopen(DATA_DIR . '/worker.lock', 'c');

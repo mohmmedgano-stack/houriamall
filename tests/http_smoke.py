@@ -85,6 +85,55 @@ try:
         q = urllib.parse.urlencode(dict(r=r, **params))
         st, html, _ = req(o, BASE + '?' + q); check(f'page {r} {params}', st, html)
 
+    # ---- real POST flows ----
+    def raw(o, url):
+        try:
+            r = o.open(url, timeout=60); return r.status, r.headers.get('Content-Type', ''), r.read()
+        except urllib.error.HTTPError as e: return e.code, '', e.read()
+    st, html, _ = req(o, BASE + '?r=settings'); req(o, BASE, {'csrf': csrf(html), 'mode': 'live'}) if False else None
+    st, html, _ = req(o, BASE + '?r=home'); t = csrf(html)
+    req(o, BASE + '?r=mode', {'csrf': t, 'mode': 'live'})
+    st, html, _ = req(o, BASE + '?r=clients'); t = csrf(html)
+    st, html, url = req(o, BASE + '?r=clients', {'csrf': t, 'a': 'create', 'name': 'عميل اختبار', 'currency': 'EGP', 'timezone': 'Africa/Cairo'}, files={'logo': ('x.txt', b'notimage', 'text/plain')})
+    check('create client (live)', st, html)
+    cid = re.search(r'id=(\d+)', url).group(1)
+    st, html, _ = req(o, BASE + f'?r=client&id={cid}'); t = csrf(html)
+    st, html, _ = req(o, BASE + f'?r=client&id={cid}', {'csrf': t, 'a': 'account_save', 'name': 'Main', 'currency': 'EGP', 'platform': 'meta'}); check('add account', st, html)
+    aid = re.search(r'<option value="(\d+)">عميل اختبار', req(o, BASE + '?r=import')[1]).group(1)
+    st, html, _ = req(o, BASE + '?r=import'); t = csrf(html)
+    csv = 'Campaign name,Day,Objective,Amount spent (EGP),Impressions,Link clicks,Leads\nحملة ليدز,2026-10-10,OUTCOME_LEADS,500,20000,200,10\n'.encode('utf-8')
+    st, html, _ = req(o, BASE + '?r=import', {'csrf': t, 'account': aid}, files={'file': ('ads.csv', csv, 'text/csv')})
+    check('import CSV', st, html)
+    if 'نتيجة الاستيراد' not in html: failures.append('import result not shown')
+    st, html, _ = req(o, BASE + '?r=dashboard&from=2026-10-10&to=2026-10-10'); check('dashboard after import', st, html)
+    if '50.00' not in html: failures.append('dashboard CPL 50.00 not shown after import')
+    st, html, _ = req(o, BASE + '?r=crm&view=add&client=' + cid); t = csrf(html)
+    st, html, _ = req(o, BASE + '?r=crm', {'csrf': t, 'a': 'create', 'client_id': cid, 'full_name': 'ليد تجربة', 'phone': '01011112222'}); check('add lead', st, html)
+    st, html, _ = req(o, BASE + '?r=reports&client=' + cid + '&type=weekly'); t = csrf(html)
+    st, html, url = req(o, BASE + '?r=reports', {'csrf': t, 'a': 'generate', 'client_id': cid, 'type': 'client', 'from': '2026-10-01', 'to': '2026-10-18'}); check('generate report', st, html)
+    rid = re.search(r'id=(\d+)', url).group(1)
+    for fmt, ctype in (('pdf', 'application/pdf'), ('xlsx', 'spreadsheetml'), ('csv', 'text/csv')):
+        code, ct, body = raw(o, BASE + f'?r=export&kind=report&id={rid}&format={fmt}')
+        if code != 200 or ctype not in ct: failures.append(f'report export {fmt}: {code} {ct}')
+        else: print('  ✓ report export', fmt, len(body), 'bytes')
+    for kind in ('perf', 'leads'):
+        code, ct, body = raw(o, BASE + f'?r=export&kind={kind}&format=csv&from=2026-10-01&to=2026-10-18')
+        if code != 200 or 'text/csv' not in ct: failures.append(f'{kind} export {code}')
+        else: print('  ✓ export', kind)
+    # permissions over HTTP: a sales user cannot open finance / users
+    st, html, _ = req(o, BASE + '?r=users'); t = csrf(html)
+    req(o, BASE + '?r=users', {'csrf': t, 'a': 'create', 'name': 'Sales', 'email': 'sales@test.local', 'role': 'sales', 'password': 'SalesPass123', 'clients[]': [cid]})
+    so = opener(); st, html, _ = req(so, BASE)
+    st, html, _ = req(so, BASE + '?r=login', {'csrf': csrf(html), 'email': 'sales@test.local', 'password': 'SalesPass123'})
+    for r in ('finance', 'users', 'dashboard', 'integrations'):
+        st, html, _ = req(so, BASE + '?r=' + r)
+        if st != 403: failures.append(f'sales user got {st} on {r}')
+    st, html, _ = req(so, BASE + '?r=crm'); check('sales sees CRM', st, html)
+    code, ct, body = raw(so, BASE + '?r=export&kind=perf&format=csv')
+    if code != 403: failures.append(f'sales perf export {code}')
+    else: print('  ✓ role restrictions enforced')
+    req(o, BASE + '?r=mode', {'csrf': csrf(req(o, BASE)[1]), 'mode': 'demo'})
+
     # CSRF: a POST without a token must be rejected
     st, html, _ = req(o, BASE + '?r=clients', {'a': 'create', 'name': 'NoToken'})
     if st != 400: failures.append(f'POST without CSRF returned {st}')
@@ -126,6 +175,7 @@ finally:
     php_errs = [l for l in err.splitlines() if re.search(r'PHP (Fatal|Warning|Notice|Deprecated|Parse)', l)]
     if php_errs: failures.extend(php_errs[:10])
     lg = os.path.join(data, 'app.log')
+    if os.path.exists(lg) and failures: print(open(lg).read()[-1500:])
     if failures and os.path.exists(lg): failures.extend(['app.log: ' + l for l in open(lg).read().splitlines()[-5:]])
     shutil.rmtree(data, ignore_errors=True)
 

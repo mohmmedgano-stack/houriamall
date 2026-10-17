@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require __DIR__ . '/src/bootstrap.php';
+require_once __DIR__ . '/src/bootstrap.php';
 start_session();
 
 /** route => [view file, permission or null] */
@@ -51,6 +51,7 @@ try {
     if (is_post()) check_csrf();
     require __DIR__ . '/views/' . $view . '.php';
 } catch (Forbidden $e) {
+    log_error('forbidden', $route . ': ' . $e->getMessage());
     http_response_code(403);
     layout_start('غير مسموح');
     echo '<div class="card">' . empty_state('مش عندك صلاحية للصفحة دي', ' كلم صاحب الحساب لو محتاج وصول.') . '</div>';
