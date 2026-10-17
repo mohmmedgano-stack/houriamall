@@ -8,6 +8,15 @@ function local_date(string $fmt, ?int $ts = null): string {
     $d->setTimezone(new DateTimeZone(app_tz()));
     return $d->format($fmt);
 }
+function ar_month(?string $date = null): string {
+    $m = (int)local_date('n', $date ? strtotime($date) : null);
+    return ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'][$m] . ' ' . local_date('Y', $date ? strtotime($date) : null);
+}
+function ar_date(?string $date = null): string {
+    $ts = $date ? strtotime($date) : null;
+    $days = ['Sunday' => 'الأحد', 'Monday' => 'الاتنين', 'Tuesday' => 'التلات', 'Wednesday' => 'الأربع', 'Thursday' => 'الخميس', 'Friday' => 'الجمعة', 'Saturday' => 'السبت'];
+    return $days[local_date('l', $ts)] . ' ' . local_date('j', $ts) . ' ' . ar_month($date);
+}
 function app_tz(): string { return $GLOBALS['CC_USER']['timezone'] ?? 'Africa/Cairo'; }
 
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }

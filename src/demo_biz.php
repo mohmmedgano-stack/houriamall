@@ -45,7 +45,8 @@ function demo_seed_business(int $clientId, int $accountId, string $kind, int $da
             } elseif (mt_rand(1, 100) <= 50) q('UPDATE leads SET stage_id = ?, lost_at = ?, lost_reason = ? WHERE id = ?', [$st['Lost']['id'], $contactAt, $reasons[mt_rand(2, 4)], $id]);
         }
         $s = (int)q_val('SELECT stage_id FROM leads WHERE id = ?', [$id]);
-        if (!stage($s)['is_won'] && !stage($s)['is_lost']) q('UPDATE leads SET next_follow_up_at = ? WHERE id = ?', [gmdate('Y-m-d H:i:s', time() + mt_rand(-3, 4) * 86400 + mt_rand(0, 40000)), $id]);
+        // open leads: most have an upcoming follow-up, a few are overdue (so the overdue view has realistic content)
+        if (!stage($s)['is_won'] && !stage($s)['is_lost'] && $daysAgo < 21) q('UPDATE leads SET next_follow_up_at = ? WHERE id = ?', [gmdate('Y-m-d H:i:s', time() + (mt_rand(1, 10) === 1 ? -mt_rand(3600, 3 * 86400) : mt_rand(3600, 5 * 86400))), $id]);
     }
     q("DELETE FROM events WHERE client_id = ?", [$clientId]);   // demo history shouldn't trigger automations
     if (function_exists('demo_seed_finance')) demo_seed_finance($clientId, $kind);

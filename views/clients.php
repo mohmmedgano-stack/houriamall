@@ -4,6 +4,7 @@ if (is_post()) {
     $a = in_str('a');
     if ($a === 'create') {
         $id = client_create($_POST, mode() === 'demo');
+        if (function_exists('default_alert_rules')) default_alert_rules($id);   // monitored from day one (editable in Watchdog)
         if (!is_admin()) set_user_clients(uid(), array_merge(q_col('SELECT client_id FROM user_clients WHERE user_id = ?', [uid()]), [$id]));
         if (!empty($_FILES['logo']) && ($e = client_logo_save($id, $_FILES['logo']))) flash($e, 'err');
         flash('اتضاف العميل ✅ ضيف حساباته الإعلانية من صفحته');

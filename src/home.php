@@ -20,7 +20,7 @@ function home_widgets(array $ids): void {
     $defs = home_widget_defs(); $on = home_prefs();
     $vis = fn($k) => in_array($k, $on, true) && can($defs[$k][1]);
     $u = current_user();
-    echo '<div class="row" style="margin-bottom:14px"><div><b style="font-size:18px">أهلاً ' . h(explode(' ', $u['name'])[0]) . ' 👋</b><div class="muted small">' . h(local_date('l j F Y')) . ' · ' . count($ids) . ' عميل' . (mode() === 'demo' ? ' (Demo)' : '') . '</div></div><span class="sp"></span>';
+    echo '<div class="row" style="margin-bottom:14px"><div><b style="font-size:18px">أهلاً ' . h(explode(' ', $u['name'])[0]) . ' 👋</b><div class="muted small">' . h(ar_date()) . ' · ' . count($ids) . ' عميل' . (mode() === 'demo' ? ' (Demo)' : '') . '</div></div><span class="sp"></span>';
     echo '<details class="box" style="padding:6px 12px"><summary class="small">تخصيص الصفحة</summary><form method="post" style="margin-top:8px">' . csrf_field() . '<input type="hidden" name="a" value="widgets">';
     foreach ($defs as $k => [$l, $perm]) if (can($perm)) echo '<label class="check" style="display:flex;margin:4px 0"><input type="checkbox" name="w[]" value="' . $k . '"' . (in_array($k, $on, true) ? ' checked' : '') . '> ' . h($l) . '</label>';
     echo '<button class="btn sm" style="margin-top:6px">حفظ</button></form></details></div>';

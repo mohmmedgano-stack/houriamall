@@ -94,7 +94,7 @@ layout_start('Budget Planner'); ?>
   <form class="row" style="margin-bottom:6px"><input type="hidden" name="r" value="budgets"><span class="muted small">العميل:</span><select name="client" onchange="this.form.submit()" style="max-width:260px"><?= select_opts(client_opts(), $formClient) ?></select></form>
   <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="save"><input type="hidden" name="client_id" value="<?= (int)$formClient ?>"><?php if ($edit): ?><input type="hidden" name="id" value="<?= (int)$edit['id'] ?>"><?php endif; ?>
     <div class="fgrid">
-      <div><label class="f">الاسم *</label><input type="text" name="name" required value="<?= h($edit['name'] ?? 'ميزانية ' . local_date('F Y')) ?>"></div>
+      <div><label class="f">الاسم *</label><input type="text" name="name" required value="<?= h($edit['name'] ?? 'ميزانية ' . ar_month()) ?>"></div>
       <div><label class="f">النطاق: حساب</label><select name="ad_account_id"><?= select_opts(array_column($accs, 'name', 'id'), $edit['ad_account_id'] ?? '', true, 'كل الحسابات') ?></select></div>
       <div><label class="f">أو حملة</label><select name="campaign_id"><?= select_opts(array_column($camps, 'name', 'id'), $edit['campaign_id'] ?? '', true, '—') ?></select></div>
       <div><label class="f">من *</label><input type="date" name="period_start" required value="<?= h($edit['period_start'] ?? $mStart) ?>"></div>

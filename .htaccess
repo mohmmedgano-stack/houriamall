@@ -3,7 +3,7 @@ DirectoryIndex index.php
 
 # only index.php, assets/ and uploads/ are public — everything else is code or data
 RedirectMatch 404 ^.*/\.git
-RedirectMatch 404 ^.*/(src|views|data|tests|bin|docs)(/|$)
+RedirectMatch 404 ^.*/(src|views|data|tests|bin|docs|lib)(/|$)
 <FilesMatch "^(worker\.php|\.env|.*\.sqlite.*|.*\.key|.*\.log|.*\.md)$">
   Require all denied
 </FilesMatch>
