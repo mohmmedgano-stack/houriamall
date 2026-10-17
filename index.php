@@ -707,22 +707,39 @@ case 'rule':
         <div id="postbox">
           <label class="f">اختار البوست</label>
           <?php if ($postErr): ?><p class="muted" style="color:var(--bad)">مقدرتش أجيب البوستات: <?= h($postErr) ?></p><?php endif; ?>
-          <?php if ($schedErr): ?><p class="muted" style="color:var(--warn)">مقدرتش أجيب البوستات المجدولة من فيسبوك (<?= h($schedErr) ?>) — استخدم "⏰ البوست الجاي" أو اكتب الـ ID تحت.</p><?php endif; ?>
+          <?php
+            $mkopt = function (string $pid, array $x, string $kind) use ($r): string {
+                $txt = trim(preg_replace('/\s+/u', ' ', (string)($x['message'] ?? ''))); $txt = $txt !== '' ? mb_substr($txt, 0, 70) : 'بوست بدون نص';
+                $when = $kind === 'sched' ? fmt_time(gmdate('Y-m-d H:i:s', (int)($x['scheduled_publish_time'] ?? 0))) : substr((string)($x['created_time'] ?? ''), 0, 10);
+                $lbl = ($kind === 'sched' ? '⏰ ' . $when . ' · ' : ($kind === 'ad' ? '[إعلان] ' : '')) . $txt . ($kind !== 'sched' ? ' · ' . $when : '');
+                return '<option value="' . h($pid) . '" data-label="' . h($lbl) . '" data-img="' . h($x['full_picture'] ?? '') . '"' . ($r['post_id'] === $pid ? ' selected' : '') . '>' . h($lbl) . '</option>';
+            };
+            $schedPosts = array_filter($posts, fn($x) => $x['kind'] === 'sched');
+            $pubPosts   = array_filter($posts, fn($x) => $x['kind'] === 'pub');
+            $adPosts    = array_filter($posts, fn($x) => $x['kind'] === 'ad');
+            $startTab   = (isset($posts[$r['post_id']]) && $posts[$r['post_id']]['kind'] === 'sched') ? 'sched' : 'pub';
+          ?>
+          <div class="row" id="post_tabs" style="gap:6px;margin-bottom:8px">
+            <button type="button" class="btn sm" data-tab="pub">📢 بوستات نزلت (<?= count($pubPosts) + count($adPosts) ?>)</button>
+            <button type="button" class="btn sm" data-tab="sched">⏰ بوستات مجدولة (<?= count($schedPosts) ?>)</button>
+          </div>
           <input type="text" id="post_q" placeholder="🔎 دوّر بكلمة من البوست أو التاريخ…" style="margin-bottom:8px">
-          <select name="post_id" id="post_sel" size="8" style="height:auto">
-            <option value="">— اختار —</option>
-            <?php foreach (['sched' => '⏰ بوستات مجدولة (' . count(array_filter($posts, fn($x) => $x['kind'] === 'sched')) . ') — بترتيب الميعاد', 'pub' => '📢 بوستات منشورة', 'ad' => '💰 بوستات إعلانات'] as $kind => $title):
-                $group = array_filter($posts, fn($x) => $x['kind'] === $kind); if (!$group) continue; ?>
-              <optgroup label="<?= h($title) ?>">
-              <?php foreach ($group as $pid => $x):
-                  $txt = trim(preg_replace('/\s+/u', ' ', (string)($x['message'] ?? ''))); $txt = $txt !== '' ? mb_substr($txt, 0, 70) : 'بوست بدون نص';
-                  $when = $kind === 'sched' ? fmt_time(gmdate('Y-m-d H:i:s', (int)($x['scheduled_publish_time'] ?? 0))) : substr((string)($x['created_time'] ?? ''), 0, 10);
-                  $lbl = ($kind === 'sched' ? '⏰ ' . $when . ' · ' : ($kind === 'ad' ? '[إعلان] ' : '')) . $txt . ($kind !== 'sched' ? ' · ' . $when : ''); ?>
-                <option value="<?= h($pid) ?>" data-label="<?= h($lbl) ?>" data-img="<?= h($x['full_picture'] ?? '') ?>" <?= $r['post_id'] === $pid ? 'selected' : '' ?>><?= h($lbl) ?></option>
-              <?php endforeach; ?>
-              </optgroup>
-            <?php endforeach; ?>
-          </select>
+          <div class="ptab" data-tab="pub">
+            <select class="psel" size="8" style="height:auto">
+              <option value="">— اختار بوست نزل —</option>
+              <?php if ($pubPosts): ?><optgroup label="📢 بوستات منشورة"><?php foreach ($pubPosts as $pid => $x) echo $mkopt($pid, $x, 'pub'); ?></optgroup><?php endif; ?>
+              <?php if ($adPosts): ?><optgroup label="💰 بوستات إعلانات"><?php foreach ($adPosts as $pid => $x) echo $mkopt($pid, $x, 'ad'); ?></optgroup><?php endif; ?>
+            </select>
+            <?php if (!$pubPosts && !$adPosts): ?><p class="muted">مفيش بوستات منشورة ظاهرة.</p><?php endif; ?>
+          </div>
+          <div class="ptab" data-tab="sched">
+            <?php if ($schedErr): ?><p class="muted" style="color:var(--warn)">مقدرتش أجيب البوستات المجدولة من فيسبوك (<?= h($schedErr) ?>) — استخدم "⏰ البوست الجاي" أو اكتب الـ ID تحت.</p><?php endif; ?>
+            <select class="psel" size="8" style="height:auto">
+              <option value="">— اختار بوست مجدول (الأقرب ينزل فوق) —</option>
+              <?php foreach ($schedPosts as $pid => $x) echo $mkopt($pid, $x, 'sched'); ?>
+            </select>
+            <?php if (!$schedPosts && !$schedErr): ?><p class="muted">مفيش بوستات مجدولة على الصفحة دي.</p><?php endif; ?>
+          </div>
           <div id="post_prev" class="row" style="margin-top:8px;display:none"><img id="post_img" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"><div class="muted" id="post_txt" style="flex:1"></div></div>
           <details style="margin-top:10px" <?= ($r['post_id'] && !$inList) ? 'open' : '' ?>><summary>البوست مش موجود في القايمة؟ اكتب الـ ID</summary>
             <input type="text" name="post_manual" dir="ltr" placeholder="مثال: 1234567890_9876543210" value="<?= h(($r['post_id'] && !$inList) ? $r['post_id'] : '') ?>" style="margin-top:8px">
@@ -778,16 +795,22 @@ case 'rule':
     const f=document.getElementById('rf');
     function sync(){f.querySelector('#postbox').style.display=f.scope.value==='post'?'':'none';f.querySelector('#kwbox').style.display=f.match_mode.value==='keywords'?'':'none'}
     f.addEventListener('change',sync);sync();
-    const s=document.getElementById('post_sel'), q=document.getElementById('post_q');
-    function prev(){const o=s.selectedOptions[0];document.getElementById('post_label').value=o?o.dataset.label||'':'';
+    const q=document.getElementById('post_q'); let cur=<?= json_encode($startTab) ?>;
+    const sel=()=>document.querySelector('.ptab[data-tab="'+cur+'"] .psel');
+    function prev(){const o=sel().selectedOptions[0];document.getElementById('post_label').value=o&&o.value?o.dataset.label||'':'';
       const box=document.getElementById('post_prev'); if(!o||!o.value){box.style.display='none';return;}
       box.style.display='flex'; const im=document.getElementById('post_img'); im.style.display=o.dataset.img?'':'none'; if(o.dataset.img) im.src=o.dataset.img;
       document.getElementById('post_txt').textContent=o.dataset.label||'';}
-    s.addEventListener('change',prev); prev();
+    function show(t){cur=t;
+      document.querySelectorAll('.ptab').forEach(p=>{const on=p.dataset.tab===t; p.style.display=on?'':'none'; const x=p.querySelector('.psel'); x.name=on?'post_id':''; x.disabled=!on;});
+      document.querySelectorAll('#post_tabs [data-tab]').forEach(b=>b.classList.toggle('sec',b.dataset.tab!==t)); prev();}
+    document.querySelectorAll('#post_tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
+    document.querySelectorAll('.psel').forEach(x=>x.addEventListener('change',prev));
+    show(cur);
     const norm=t=>t.toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
     q.addEventListener('input',()=>{const v=norm(q.value.trim());
-      s.querySelectorAll('option').forEach(o=>{ if(!o.value) return; o.hidden = v!=='' && !norm(o.textContent).includes(v); });
-      s.querySelectorAll('optgroup').forEach(g=>{ g.hidden=[...g.querySelectorAll('option')].every(o=>o.hidden); });});
+      document.querySelectorAll('.psel option').forEach(o=>{ if(!o.value) return; o.hidden = v!=='' && !norm(o.textContent).includes(v); });
+      document.querySelectorAll('.psel optgroup').forEach(g=>{ g.hidden=[...g.querySelectorAll('option')].every(o=>o.hidden); });});
     </script>
     <?php bottom(); break;
 
