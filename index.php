@@ -670,19 +670,26 @@ case 'rule':
     $scopeNext = $draft ? (($draft['scope'] ?? '') === 'next') : ((int)($r['wait_next'] ?? 0) === 1 && !$r['post_id']);
     $scopeAll = !$scopeNext && ($draft ? (($draft['scope'] ?? 'post') === 'all') : ($id && !$r['post_id']));
 
-    // Fetch recent posts (organic + ad posts)
-    $posts = []; $postErr = null;
-    $fields = 'id,message,created_time,full_picture';
-    $res = graph('GET', $pg['id'] . '/posts', ['fields' => $fields, 'limit' => 30], $pg['token']);
-    if ($e = gerr($res)) $postErr = $e; else foreach ($res['data'] ?? [] as $x) $posts[$x['id']] = $x + ['ad' => false];
-    $res2 = graph('GET', $pg['id'] . '/ads_posts', ['fields' => $fields, 'limit' => 30, 'include_inline_create' => 'true'], $pg['token']);
-    if (!gerr($res2)) foreach ($res2['data'] ?? [] as $x) if (!isset($posts[$x['id']])) $posts[$x['id']] = $x + ['ad' => true];
-    $res3 = graph('GET', $pg['id'] . '/scheduled_posts', ['fields' => 'id,message,scheduled_publish_time', 'limit' => 30], $pg['token']);
-    if (!gerr($res3)) foreach ($res3['data'] ?? [] as $x) {
-        $t = (int)($x['scheduled_publish_time'] ?? 0);
-        $posts[$x['id']] = ['id' => $x['id'], 'message' => $x['message'] ?? '', 'created_time' => $t ? gmdate('Y-m-d\TH:i:sO', $t) : '', 'ad' => false, 'sched' => $t];
-    }
-    uasort($posts, fn($a, $b) => strcmp($b['created_time'] ?? '', $a['created_time'] ?? ''));
+    // Fetch posts: scheduled (all of them, paged), published and ad posts
+    $fetch_all = function (string $edge, array $params, int $max) use ($pg): array {
+        $out = []; $after = null; $err = null;
+        do {
+            $q = $params + ['limit' => 50]; if ($after) $q['after'] = $after;
+            $res = graph('GET', $pg['id'] . '/' . $edge, $q, $pg['token']);
+            if ($e = gerr($res)) { $err = $e; break; }
+            foreach ($res['data'] ?? [] as $x) $out[] = $x;
+            $after = isset($res['paging']['next']) ? ($res['paging']['cursors']['after'] ?? null) : null;
+        } while ($after && count($out) < $max);
+        return [$out, $err];
+    };
+    $posts = []; $postErr = null; $schedErr = null;
+    [$sched, $schedErr] = $fetch_all('scheduled_posts', ['fields' => 'id,message,scheduled_publish_time,full_picture'], 300);
+    usort($sched, fn($a, $b) => ((int)($a['scheduled_publish_time'] ?? 0)) <=> ((int)($b['scheduled_publish_time'] ?? 0)));   // soonest first
+    foreach ($sched as $x) { $posts[$x['id']] = $x + ['kind' => 'sched']; }
+    [$pub, $postErr] = $fetch_all('posts', ['fields' => 'id,message,created_time,full_picture'], 60);
+    foreach ($pub as $x) if (!isset($posts[$x['id']])) $posts[$x['id']] = $x + ['kind' => 'pub'];
+    [$ads] = $fetch_all('ads_posts', ['fields' => 'id,message,created_time,full_picture', 'include_inline_create' => 'true'], 60);
+    foreach ($ads as $x) if (!isset($posts[$x['id']])) $posts[$x['id']] = $x + ['kind' => 'ad'];
     $inList = isset($posts[$r['post_id']]);
 
     top($id ? 'تعديل قاعدة' : 'قاعدة جديدة'); ?>
@@ -700,14 +707,23 @@ case 'rule':
         <div id="postbox">
           <label class="f">اختار البوست</label>
           <?php if ($postErr): ?><p class="muted" style="color:var(--bad)">مقدرتش أجيب البوستات: <?= h($postErr) ?></p><?php endif; ?>
-          <select name="post_id" id="post_sel">
+          <?php if ($schedErr): ?><p class="muted" style="color:var(--warn)">مقدرتش أجيب البوستات المجدولة من فيسبوك (<?= h($schedErr) ?>) — استخدم "⏰ البوست الجاي" أو اكتب الـ ID تحت.</p><?php endif; ?>
+          <input type="text" id="post_q" placeholder="🔎 دوّر بكلمة من البوست أو التاريخ…" style="margin-bottom:8px">
+          <select name="post_id" id="post_sel" size="8" style="height:auto">
             <option value="">— اختار —</option>
-            <?php foreach ($posts as $pid => $x):
-                $lbl = trim(preg_replace('/\s+/u', ' ', (string)($x['message'] ?? ''))); $lbl = $lbl !== '' ? mb_substr($lbl, 0, 70) : 'بوست بدون نص';
-                $lbl = (!empty($x['sched']) ? '[⏰ مجدول ' . fmt_time(gmdate('Y-m-d H:i:s', $x['sched'])) . '] ' : ($x['ad'] ? '[إعلان] ' : '')) . $lbl . (empty($x['sched']) ? ' · ' . substr((string)($x['created_time'] ?? ''), 0, 10) : ''); ?>
-              <option value="<?= h($pid) ?>" data-label="<?= h($lbl) ?>" <?= $r['post_id'] === $pid ? 'selected' : '' ?>><?= h($lbl) ?></option>
+            <?php foreach (['sched' => '⏰ بوستات مجدولة (' . count(array_filter($posts, fn($x) => $x['kind'] === 'sched')) . ') — بترتيب الميعاد', 'pub' => '📢 بوستات منشورة', 'ad' => '💰 بوستات إعلانات'] as $kind => $title):
+                $group = array_filter($posts, fn($x) => $x['kind'] === $kind); if (!$group) continue; ?>
+              <optgroup label="<?= h($title) ?>">
+              <?php foreach ($group as $pid => $x):
+                  $txt = trim(preg_replace('/\s+/u', ' ', (string)($x['message'] ?? ''))); $txt = $txt !== '' ? mb_substr($txt, 0, 70) : 'بوست بدون نص';
+                  $when = $kind === 'sched' ? fmt_time(gmdate('Y-m-d H:i:s', (int)($x['scheduled_publish_time'] ?? 0))) : substr((string)($x['created_time'] ?? ''), 0, 10);
+                  $lbl = ($kind === 'sched' ? '⏰ ' . $when . ' · ' : ($kind === 'ad' ? '[إعلان] ' : '')) . $txt . ($kind !== 'sched' ? ' · ' . $when : ''); ?>
+                <option value="<?= h($pid) ?>" data-label="<?= h($lbl) ?>" data-img="<?= h($x['full_picture'] ?? '') ?>" <?= $r['post_id'] === $pid ? 'selected' : '' ?>><?= h($lbl) ?></option>
+              <?php endforeach; ?>
+              </optgroup>
             <?php endforeach; ?>
           </select>
+          <div id="post_prev" class="row" style="margin-top:8px;display:none"><img id="post_img" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"><div class="muted" id="post_txt" style="flex:1"></div></div>
           <details style="margin-top:10px" <?= ($r['post_id'] && !$inList) ? 'open' : '' ?>><summary>البوست مش موجود في القايمة؟ اكتب الـ ID</summary>
             <input type="text" name="post_manual" dir="ltr" placeholder="مثال: 1234567890_9876543210" value="<?= h(($r['post_id'] && !$inList) ? $r['post_id'] : '') ?>" style="margin-top:8px">
             <p class="muted">لبوستات الإعلانات: ده الـ Post ID بتاع الإعلان (Effective Object Story ID).</p>
@@ -762,7 +778,16 @@ case 'rule':
     const f=document.getElementById('rf');
     function sync(){f.querySelector('#postbox').style.display=f.scope.value==='post'?'':'none';f.querySelector('#kwbox').style.display=f.match_mode.value==='keywords'?'':'none'}
     f.addEventListener('change',sync);sync();
-    const s=document.getElementById('post_sel');s.addEventListener('change',()=>{const o=s.selectedOptions[0];document.getElementById('post_label').value=o?o.dataset.label||'':''});
+    const s=document.getElementById('post_sel'), q=document.getElementById('post_q');
+    function prev(){const o=s.selectedOptions[0];document.getElementById('post_label').value=o?o.dataset.label||'':'';
+      const box=document.getElementById('post_prev'); if(!o||!o.value){box.style.display='none';return;}
+      box.style.display='flex'; const im=document.getElementById('post_img'); im.style.display=o.dataset.img?'':'none'; if(o.dataset.img) im.src=o.dataset.img;
+      document.getElementById('post_txt').textContent=o.dataset.label||'';}
+    s.addEventListener('change',prev); prev();
+    const norm=t=>t.toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
+    q.addEventListener('input',()=>{const v=norm(q.value.trim());
+      s.querySelectorAll('option').forEach(o=>{ if(!o.value) return; o.hidden = v!=='' && !norm(o.textContent).includes(v); });
+      s.querySelectorAll('optgroup').forEach(g=>{ g.hidden=[...g.querySelectorAll('option')].every(o=>o.hidden); });});
     </script>
     <?php bottom(); break;
 
