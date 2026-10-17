@@ -307,7 +307,8 @@ if ($a) {
             if (!$pg) redirect('?');
             $id = (int)($_POST['id'] ?? 0);
             $scope = $_POST['scope'] ?? 'post';
-            $postId = ''; $postLabel = '';
+            $postId = ''; $postLabel = ''; $wn = $scope === 'next' ? 1 : 0;
+            if ($wn) $postLabel = '⏳ مستنية البوست الجاي';
             if ($scope === 'post') {
                 $manual = trim((string)($_POST['post_manual'] ?? ''));
                 $postId = $manual !== '' ? $manual : trim((string)($_POST['post_id'] ?? ''));
@@ -332,16 +333,17 @@ if ($a) {
             elseif ($sd && !variants($dm)) $err = 'اكتب نص الرسالة الخاصة';
             if (!$err && $upErr) $err = $upErr;
             if ($err) { $_SESSION['rule_draft'] = $_POST; flash($err, 'err'); redirect('?p=rule&page=' . urlencode($pageId) . ($id ? '&id=' . $id : '')); }
-            $name = trim((string)($_POST['name'] ?? '')) ?: ($postLabel ?: 'كل البوستات');
-            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu, json_encode($imgs, JSON_UNESCAPED_SLASHES), $ib, $lk];
+            $name = trim((string)($_POST['name'] ?? '')) ?: ($wn ? 'البوست الجاي' : ($postLabel ?: 'كل البوستات'));
+            $vals = [$postId, $postLabel, $name, isset($_POST['active']) ? 1 : 0, $mode, $kw, $sc, $cr, $sd, $dm, $fb, $mu, json_encode($imgs, JSON_UNESCAPED_SLASHES), $ib, $lk, $wn];
             if ($id) {
-                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=?, images=?, images_button=?, like_comment=? WHERE id=? AND page_id=?')
+                db()->prepare('UPDATE rules SET post_id=?, post_label=?, name=?, active=?, match_mode=?, keywords=?, send_comment=?, comment_replies=?, send_dm=?, dm_messages=?, fallback_replies=?, mention_user=?, images=?, images_button=?, like_comment=?, wait_next=? WHERE id=? AND page_id=?')
                     ->execute(array_merge($vals, [$id, $pageId]));
             } else {
-                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, like_comment, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, like_comment, wait_next, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute(array_merge($vals, [$pageId, now()]));
             }
-            flash('اتحفظت القاعدة ✅' . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
+            if ($wn && $id) db_run('UPDATE rules SET created_at = ? WHERE id = ?', [now(), $id]);
+            flash(($wn ? 'اتحفظت ✅ القاعدة هتشتغل لوحدها أول ما الصفحة تنزّل البوست الجاي (حتى لو مجدول)' : 'اتحفظت القاعدة ✅') . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
             redirect('?p=page&id=' . urlencode($pageId));
 
         case 'block_save':
@@ -559,7 +561,7 @@ case 'page':
             </div>
           </div>
           <div class="muted" style="margin-top:6px">
-            📍 <?= $r['post_id'] ? 'بوست: ' . h($r['post_label'] ?: $r['post_id']) : 'كل البوستات' ?> ·
+            📍 <?= $r['post_id'] ? 'بوست: ' . h($r['post_label'] ?: $r['post_id']) : ((int)($r['wait_next'] ?? 0) === 1 ? '<span class="badge warn">⏳ مستنية البوست الجاي</span>' : 'كل البوستات') ?> ·
             🔎 <?= $r['match_mode'] === 'keywords' ? 'كلمات: ' . h(implode('، ', keywords_of($r['keywords']))) : 'أي كومنت' ?> ·
             <?= (int)$r['send_comment'] === 1 ? '💬 رد كومنت (' . count(variants($r['comment_replies'])) . ' صيغة)' : '' ?>
             <?= (int)$r['send_dm'] === 1 ? ' ✉️ رسالة خاصة (' . count(variants($r['dm_messages'])) . ' صيغة)' : '' ?>
@@ -657,7 +659,7 @@ case 'rule':
     $pg = get_page((string)($_GET['page'] ?? ''));
     if (!$pg) redirect('?');
     $id = (int)($_GET['id'] ?? 0);
-    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => '', 'like_comment' => 0];
+    $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => '', 'like_comment' => 0, 'wait_next' => 0];
     if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = fetch_one($st) ?: $r; }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
@@ -665,7 +667,8 @@ case 'rule':
         $r['post_id'] = ($draft['scope'] ?? 'post') === 'post' ? (($draft['post_manual'] ?? '') ?: ($draft['post_id'] ?? '')) : '';
         $r['send_comment'] = isset($draft['send_comment']) ? 1 : 0; $r['send_dm'] = isset($draft['send_dm']) ? 1 : 0; $r['active'] = isset($draft['active']) ? 1 : 0; $r['mention_user'] = isset($draft['mention_user']) ? 1 : 0; $r['like_comment'] = isset($draft['like_comment']) ? 1 : 0;
     }
-    $scopeAll = $draft ? (($draft['scope'] ?? 'post') === 'all') : ($id && !$r['post_id']);
+    $scopeNext = $draft ? (($draft['scope'] ?? '') === 'next') : ((int)($r['wait_next'] ?? 0) === 1 && !$r['post_id']);
+    $scopeAll = !$scopeNext && ($draft ? (($draft['scope'] ?? 'post') === 'all') : ($id && !$r['post_id']));
 
     // Fetch recent posts (organic + ad posts)
     $posts = []; $postErr = null;
@@ -674,6 +677,11 @@ case 'rule':
     if ($e = gerr($res)) $postErr = $e; else foreach ($res['data'] ?? [] as $x) $posts[$x['id']] = $x + ['ad' => false];
     $res2 = graph('GET', $pg['id'] . '/ads_posts', ['fields' => $fields, 'limit' => 30, 'include_inline_create' => 'true'], $pg['token']);
     if (!gerr($res2)) foreach ($res2['data'] ?? [] as $x) if (!isset($posts[$x['id']])) $posts[$x['id']] = $x + ['ad' => true];
+    $res3 = graph('GET', $pg['id'] . '/scheduled_posts', ['fields' => 'id,message,scheduled_publish_time', 'limit' => 30], $pg['token']);
+    if (!gerr($res3)) foreach ($res3['data'] ?? [] as $x) {
+        $t = (int)($x['scheduled_publish_time'] ?? 0);
+        $posts[$x['id']] = ['id' => $x['id'], 'message' => $x['message'] ?? '', 'created_time' => $t ? gmdate('Y-m-d\TH:i:sO', $t) : '', 'ad' => false, 'sched' => $t];
+    }
     uasort($posts, fn($a, $b) => strcmp($b['created_time'] ?? '', $a['created_time'] ?? ''));
     $inList = isset($posts[$r['post_id']]);
 
@@ -686,8 +694,9 @@ case 'rule':
 
       <div class="card">
         <h2>١. على أنهي بوست؟</h2>
-        <label class="opt"><input type="radio" name="scope" value="post" <?= $scopeAll ? '' : 'checked' ?>><div><strong>بوست معيّن</strong><div class="muted">رد مخصوص للبوست ده بس</div></div></label>
+        <label class="opt"><input type="radio" name="scope" value="post" <?= ($scopeAll || $scopeNext) ? '' : 'checked' ?>><div><strong>بوست معيّن</strong><div class="muted">رد مخصوص للبوست ده بس</div></div></label>
         <label class="opt"><input type="radio" name="scope" value="all" <?= $scopeAll ? 'checked' : '' ?>><div><strong>كل بوستات الصفحة</strong><div class="muted">رد عام لأي بوست ملوش قاعدة خاصة</div></div></label>
+        <label class="opt"><input type="radio" name="scope" value="next" <?= $scopeNext ? 'checked' : '' ?>><div><strong>⏰ البوست الجاي (للبوستات المجدولة)</strong><div class="muted">القاعدة بتستنى، وأول ما الصفحة تنزّل بوست جديد — حتى لو مجدول من Business Suite — بتتربط بيه وتبدأ ترد لوحدها</div></div></label>
         <div id="postbox">
           <label class="f">اختار البوست</label>
           <?php if ($postErr): ?><p class="muted" style="color:var(--bad)">مقدرتش أجيب البوستات: <?= h($postErr) ?></p><?php endif; ?>
@@ -695,7 +704,7 @@ case 'rule':
             <option value="">— اختار —</option>
             <?php foreach ($posts as $pid => $x):
                 $lbl = trim(preg_replace('/\s+/u', ' ', (string)($x['message'] ?? ''))); $lbl = $lbl !== '' ? mb_substr($lbl, 0, 70) : 'بوست بدون نص';
-                $lbl = ($x['ad'] ? '[إعلان] ' : '') . $lbl . ' · ' . substr((string)($x['created_time'] ?? ''), 0, 10); ?>
+                $lbl = (!empty($x['sched']) ? '[⏰ مجدول ' . fmt_time(gmdate('Y-m-d H:i:s', $x['sched'])) . '] ' : ($x['ad'] ? '[إعلان] ' : '')) . $lbl . (empty($x['sched']) ? ' · ' . substr((string)($x['created_time'] ?? ''), 0, 10) : ''); ?>
               <option value="<?= h($pid) ?>" data-label="<?= h($lbl) ?>" <?= $r['post_id'] === $pid ? 'selected' : '' ?>><?= h($lbl) ?></option>
             <?php endforeach; ?>
           </select>

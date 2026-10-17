@@ -64,6 +64,7 @@ if (setting('retry_expired', '') !== '1') {
 
 $deadline = time() + 50;
 
+$safe(fn() => check_waiting_rules(), 'waiting');
 $safe(fn() => retry_due(10), 'retry');
 
 if (time() - (int)setting('last_sweep', '0') >= 600) {

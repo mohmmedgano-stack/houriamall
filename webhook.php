@@ -61,6 +61,13 @@ foreach ($data['entry'] ?? [] as $entry) {
     foreach ($entry['changes'] ?? [] as $ch) {
         if (($ch['field'] ?? '') !== 'feed') continue;
         $v = $ch['value'] ?? [];
+        // the page just published a post (incl. a scheduled one going live) → start any rule waiting for it
+        if (($v['item'] ?? '') !== 'comment' && ($v['verb'] ?? '') === 'add' && (string)($v['from']['id'] ?? '') === $pageId
+            && !empty($v['post_id']) && (int)($v['published'] ?? 1) === 1) {
+            try { bind_next_rules($pageId, (string)$v['post_id'], isset($v['created_time']) ? (int)$v['created_time'] : time(), mb_substr(trim((string)($v['message'] ?? '')), 0, 60)); }
+            catch (Throwable $e) { error_log('[autoreply] bind: ' . $e->getMessage()); }
+            continue;
+        }
         if (($v['item'] ?? '') !== 'comment' || ($v['verb'] ?? '') !== 'add') continue;
 
         $postId    = (string)($v['post_id'] ?? '');
