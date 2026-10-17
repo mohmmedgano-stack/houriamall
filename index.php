@@ -477,9 +477,12 @@ case 'blocks':
             </div>
           </div>
           <div class="muted" style="margin-top:6px">
-            📍 <?= $b['page_id'] ? h($names[$b['page_id']] ?? $b['page_id']) : 'كل الصفحات' ?> ·
-            <?= $kw ? '🔤 ' . count($kw) . ' كلمة' : '' ?><?= (int)$b['block_links'] ? ' · 🔗 لينكات' : '' ?><?= (int)$b['block_phones'] ? ' · 📞 أرقام' : '' ?><?= (int)$b['block_mentions'] ? ' · 🏷️ منشن' : '' ?>
-            · اتعامل مع <strong><?= (int)$b['hits'] ?></strong> كومنت
+            <?= implode(' · ', array_filter([
+                '📍 ' . h($b['page_id'] ? ($names[$b['page_id']] ?? $b['page_id']) : 'كل الصفحات'),
+                $kw ? '🔤 ' . count($kw) . ' كلمة' : '', (int)$b['block_links'] ? '🔗 لينكات' : '',
+                (int)$b['block_phones'] ? '📞 أرقام' : '', (int)$b['block_mentions'] ? '🏷️ منشن' : '',
+                'اتعامل مع <strong>' . (int)$b['hits'] . '</strong> كومنت',
+            ])) ?>
           </div>
           <?php if ($kw): ?><div class="muted clip" style="margin-top:4px"><?= h(implode('، ', $kw)) ?></div><?php endif; ?>
         </div>
