@@ -1,5 +1,6 @@
 <?php
 $ids = scope_client_ids();
+if (is_post()) home_widgets($ids);
 layout_start('الرئيسية');
 if (function_exists('home_widgets')) { home_widgets($ids); layout_end(); return; } ?>
 <div class="kpis">

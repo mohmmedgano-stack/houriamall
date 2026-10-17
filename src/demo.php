@@ -20,12 +20,13 @@ function demo_seed(int $days = 60): int {
         ['name' => 'Gulf Clinic', 'industry' => 'طبي', 'currency' => 'USD', 'kind' => 'leads'],
     ];
     $ids = [];
-    foreach ($clients as $c) {
+    tx(function () use ($clients, $days, &$ids) { foreach ($clients as $c) {
         $cid = client_create($c, true);
         $ids[] = $cid;
         $acc = account_save(null, $cid, ['name' => $c['name'] . ' — Ad Account', 'currency' => $c['currency'], 'platform' => 'meta']);
         if (function_exists('demo_seed_performance')) demo_seed_performance($cid, $acc, $c['kind'], $days);
-    }
+        if (function_exists('demo_seed_business')) demo_seed_business($cid, $acc, $c['kind'], $days);
+    } });
     audit('demo.seed', null, null, ['clients' => count($ids)]);
     return count($ids);
 }

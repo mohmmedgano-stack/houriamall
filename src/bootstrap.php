@@ -9,9 +9,9 @@ if (!defined('DATA_DIR')) define('DATA_DIR', (string)(getenv('MBCC_DATA_DIR') ?:
 mb_internal_encoding('UTF-8');
 date_default_timezone_set('UTC');
 
-foreach (['util', 'ui', 'migrations', 'db', 'crypto', 'audit', 'auth', 'scope', 'metrics', 'xlsx', 'importer', 'analytics',
+foreach (['util', 'ui', 'migrations', 'db', 'crypto', 'audit', 'auth', 'scope', 'metrics', 'xlsx', 'importer', 'analytics', 'perf_ui', 'export', 'home',
           'clients', 'budget', 'auditor', 'audience', 'creative', 'crm', 'leadquality', 'watchdog', 'reports',
-          'events', 'automation', 'finance', 'copygen', 'autoreply', 'meta', 'ai', 'demo'] as $m) {
+          'events', 'automation', 'finance', 'copygen', 'autoreply', 'meta', 'ai', 'demo', 'demo_perf'] as $m) {
     $f = __DIR__ . "/$m.php";
     if (is_file($f)) require_once $f;
 }

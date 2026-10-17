@@ -130,6 +130,7 @@ table.t td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:t
 table.t tr:last-child td{border-bottom:0}
 table.t tr:hover td{background:color-mix(in srgb,var(--panel2) 70%,transparent)}
 table.t td.n,table.t th.n{text-align:end;white-space:nowrap}
+table.t td.main-cell{min-width:200px}
 table.t tfoot td{font-weight:700;background:var(--panel2)}
 a.sort{color:inherit}a.sort.on::after{content:" ▾";color:var(--acc)}a.sort.on.desc::after{content:" ▴"}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap;font-size:13px}

@@ -92,7 +92,7 @@
   }
   if (document.querySelector('canvas[data-chart]')) {
     const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+    s.src = 'assets/chart.umd.min.js';   // vendored Chart.js 4.4.1 (MIT) — no CDN dependency
     s.onload = draw; document.head.appendChild(s);
     document.addEventListener('themechange', draw);
   }
