@@ -51,3 +51,24 @@ function demo_seed_business(int $clientId, int $accountId, string $kind, int $da
     q("DELETE FROM events WHERE client_id = ?", [$clientId]);   // demo history shouldn't trigger automations
     if (function_exists('demo_seed_finance')) demo_seed_finance($clientId, $kind);
 }
+
+/** Demo fees, invoices and expenses so the profit tracker has history. */
+function demo_seed_finance(int $clientId, string $kind): void {
+    if (q_val('SELECT 1 FROM client_services WHERE client_id = ?', [$clientId])) return;
+    $cur = (string)q_val('SELECT currency FROM clients WHERE id = ?', [$clientId]);
+    $fee = $cur === 'USD' ? 600 : ($kind === 'sales' ? 12000 : 18000);
+    $start = (new DateTimeImmutable(today()))->modify('first day of this month')->modify('-5 months');
+    $sid = db_insert('client_services', ['client_id' => $clientId, 'name' => 'إدارة الحملات الإعلانية', 'fee_type' => 'monthly', 'amount' => $fee, 'currency' => $cur,
+        'start_date' => $start->format('Y-m-d'), 'billing_day' => 1, 'active' => 1, 'created_at' => now()]);
+    for ($i = 0; $i < 6; $i++) {
+        $m = $start->modify("+$i months"); $issue = $m->format('Y-m-01');
+        $paid = $i < 5 ? ($i === 4 && $kind === 'sales' ? $fee / 2 : $fee) : 0;
+        db_insert('client_invoices', ['client_id' => $clientId, 'service_id' => $sid, 'number' => 'INV-' . $m->format('Ym') . '-S' . $sid, 'description' => 'إدارة الحملات — ' . ar_month($issue),
+            'amount' => $fee, 'currency' => $cur, 'issue_date' => $issue, 'due_date' => $m->modify('+7 days')->format('Y-m-d'), 'paid_amount' => $paid,
+            'paid_at' => $paid ? $m->modify('+5 days')->format('Y-m-d') : null, 'status' => $paid >= $fee ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'), 'created_at' => now()]);
+        if ($cur === 'EGP') db_insert('expenses', ['client_id' => $clientId, 'category' => 'content', 'vendor' => 'تصوير', 'amount' => 2500, 'currency' => 'EGP', 'date' => $m->format('Y-m-10'), 'is_demo' => 1, 'created_at' => now()]);
+    }
+    if (!q_val('SELECT 1 FROM expenses WHERE client_id IS NULL AND is_demo = 1'))
+        for ($i = 0; $i < 6; $i++) foreach ([['tools', 'Canva', 450], ['ai', 'AI tools', 1500], ['hosting', 'Hostinger', 300]] as [$cat, $v, $a])
+            db_insert('expenses', ['client_id' => null, 'category' => $cat, 'vendor' => $v, 'amount' => $a, 'currency' => 'EGP', 'date' => $start->modify("+$i months")->format('Y-m-05'), 'is_demo' => 1, 'created_at' => now()]);
+}

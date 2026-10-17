@@ -46,6 +46,7 @@ function demo_seed_inner(int $days): int {
         foreach (q_all('SELECT * FROM alert_rules WHERE client_id IN (' . in_list($ids) . ')') as $r) evaluate_rule($r);
         check_budget_alerts();
     }
+    if (function_exists('wf_save')) foreach (['new_lead', 'weekly_report', 'overdue'] as $k) wf_save(null, wf_templates()[$k] + ['client_id' => $ids[0], 'active' => 1, 'trigger_config' => wf_templates()[$k]['trigger_config'] ?? []]);
     if (function_exists('report_build')) { [$f, $t] = report_default_period('weekly'); report_save(report_build('weekly', $ids[0], $f, $t)); }
     q('DELETE FROM events WHERE client_id IN (' . in_list($ids) . ')');
     audit('demo.seed', null, null, ['clients' => count($ids)]);

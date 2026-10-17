@@ -111,7 +111,7 @@ function fmt_num($v, int $dec = 0): string {
 }
 function fmt_money($v, ?string $cur, int $dec = 2): string {
     if ($v === null) return fmt_num(null);
-    return number_format((float)$v, $dec) . ' <small class="cur">' . h($cur ?: '') . '</small>';
+    return '<bdi>' . number_format((float)$v, $dec) . '</bdi> <small class="cur">' . h($cur ?: '') . '</small>';
 }
 function fmt_pct($v, int $dec = 2): string {
     if ($v === null) return fmt_num(null);
