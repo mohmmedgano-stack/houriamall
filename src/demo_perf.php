@@ -53,7 +53,7 @@ function demo_seed_performance(int $clientId, int $accountId, string $kind, int 
                         'leads' => null, 'purchases' => null, 'purchase_value' => null, 'results' => null, 'result_type' => null,
                         'video_3s' => $video ? (int)round($imp * $rnd(0.18, 0.34) * $q) : null, 'thruplays' => $video ? (int)round($imp * $rnd(0.05, 0.11) * $q) : null];
                     if ($video) { $row['video_p25'] = (int)round($row['video_3s'] * 0.55); $row['video_p50'] = (int)round($row['video_3s'] * 0.33); $row['video_p75'] = (int)round($row['video_3s'] * 0.21); $row['video_p100'] = (int)round($row['video_3s'] * 0.12); }
-                    if ($goal === 'leads') { $row['leads'] = (float)(int)round($link * $rnd(0.06, 0.14) * $q); $row['results'] = $row['leads']; $row['result_type'] = 'lead'; }
+                    if ($goal === 'leads') { $row['leads'] = (float)(int)round($link * $rnd(0.008, 0.018) * $q); $row['results'] = $row['leads']; $row['result_type'] = 'lead'; }
                     elseif ($goal === 'sales') { $row['purchases'] = (float)(int)round($link * $rnd(0.012, 0.03) * $q); $row['purchase_value'] = round($row['purchases'] * $rnd(700, 1200) * $fx, 2); $row['results'] = $row['purchases']; $row['result_type'] = 'purchase'; }
                     elseif ($goal === 'traffic') { $row['results'] = (float)$row['landing_page_views']; $row['result_type'] = 'landing_page_view'; }
                     else { $row['results'] = (float)(int)round($imp / 1.6); $row['result_type'] = 'reach'; }

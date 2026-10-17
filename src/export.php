@@ -26,3 +26,17 @@ function export_dispatch(string $kind): void {
             http_response_code(404); echo 'Unknown export';
     }
 }
+
+/** Exports added by later modules. Returns true when handled. */
+function export_more(string $kind, string $fmt): bool {
+    if ($kind === 'leads') {
+        require_perm('crm.view');
+        [$w, $p] = crm_filters_sql();
+        $rows = lead_export_rows($w, $p);
+        audit('export.leads', null, null, ['rows' => count($rows) - 1, 'format' => $fmt]);   // personal data export is always logged
+        $name = 'leads-' . today() . '.' . $fmt;
+        $fmt === 'xlsx' ? send_xlsx($name, $rows, 'Leads') : send_csv($name, $rows);
+    }
+    if (function_exists('export_reports') && export_reports($kind, $fmt)) return true;
+    return false;
+}

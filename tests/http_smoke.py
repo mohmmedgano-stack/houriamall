@@ -125,6 +125,8 @@ finally:
     err = srv.stderr.read().decode('utf-8', 'replace') if srv.stderr else ''
     php_errs = [l for l in err.splitlines() if re.search(r'PHP (Fatal|Warning|Notice|Deprecated|Parse)', l)]
     if php_errs: failures.extend(php_errs[:10])
+    lg = os.path.join(data, 'app.log')
+    if failures and os.path.exists(lg): failures.extend(['app.log: ' + l for l in open(lg).read().splitlines()[-5:]])
     shutil.rmtree(data, ignore_errors=True)
 
 print()
