@@ -1,0 +1,7 @@
+data/*
+!data/.htaccess
+!data/index.html
+uploads/*
+!uploads/.htaccess
+!uploads/index.html
+tests/_tmp/

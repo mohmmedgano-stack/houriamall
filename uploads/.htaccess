@@ -1,0 +1,5 @@
+Options -Indexes
+# images only — never execute anything from here
+<FilesMatch "\.(php\d?|phtml|phar|pl|py|cgi|sh|html?|svg|js)$">
+  Require all denied
+</FilesMatch>
