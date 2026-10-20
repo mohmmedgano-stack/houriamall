@@ -194,22 +194,9 @@ function import_pages(string $userToken): array {
     $long = (string)$r['access_token'];
     set_setting('user_token', $long);
 
-    $count = 0; $after = null; $guard = 0;
-    $up = db()->prepare("INSERT INTO pages (id, name, token, active, picture, updated_at) VALUES (?, ?, ?, 0, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET name = excluded.name, token = excluded.token, picture = excluded.picture, updated_at = excluded.updated_at");
-    do {
-        $params = ['fields' => 'id,name,access_token,picture{url}', 'limit' => 100];
-        if ($after) $params['after'] = $after;
-        $res = graph('GET', 'me/accounts', $params, $long);
-        if ($e = gerr($res)) return ['error' => $e];
-        foreach ($res['data'] ?? [] as $pg) {
-            if (empty($pg['access_token'])) continue;
-            $up->execute([(string)$pg['id'], $pg['name'] ?? '', $pg['access_token'], $pg['picture']['data']['url'] ?? '', now()]);
-            $count++;
-        }
-        $after = $res['paging']['cursors']['after'] ?? null;
-        $hasNext = isset($res['paging']['next']);
-    } while ($hasNext && $after && ++$guard < 20);
+    $got = sync_pages($long);
+    if (isset($got['error'])) return $got;
+    $count = $got['count'];
 
     // Re-subscribe pages that were already active (tokens changed)
     foreach (db()->query('SELECT * FROM pages WHERE active = 1')->fetchAll() as $pg) {
@@ -304,23 +291,56 @@ function retry_delay(array $r, int $attempt = 1): ?int {
 }
 
 /** Re-fetch every page token with the saved long-lived user token (self-heal for expired page tokens). */
-function refresh_page_tokens(): void {
+function refresh_page_tokens(bool $force = false): void {
     $last = (int)setting('tokens_refreshed', '0');
-    if (time() - $last < 1800) return;
+    if (!$force && time() - $last < 1800) return;
     set_setting('tokens_refreshed', (string)time());
     $user = setting('user_token');
     if (!$user) return;
-    $after = null; $guard = 0;
-    $up = db()->prepare('UPDATE pages SET token = ?, updated_at = ? WHERE id = ?');
-    do {
-        $params = ['fields' => 'id,access_token', 'limit' => 100];
-        if ($after) $params['after'] = $after;
-        $res = graph('GET', 'me/accounts', $params, $user);
-        if (gerr($res)) { set_setting('token_problem', now()); return; }
-        foreach ($res['data'] ?? [] as $pg) if (!empty($pg['access_token'])) $up->execute([$pg['access_token'], now(), (string)$pg['id']]);
-        $after = $res['paging']['cursors']['after'] ?? null;
-    } while (isset($res['paging']['next']) && $after && ++$guard < 20);
+    $got = sync_pages($user);
+    if (isset($got['error'])) { set_setting('token_problem', now()); return; }
     set_setting('token_problem', '');
+}
+
+/** Public, always-fresh page photo (the CDN link Facebook returns expires after a few days). */
+function page_pic(array $pg): string {
+    return 'https://graph.facebook.com/' . rawurlencode((string)$pg['id']) . '/picture?type=normal';
+}
+
+/**
+ * Pull every page this login can reach — personal pages (me/accounts) plus pages owned by or shared
+ * with the user's Business portfolios — and add new ones (switched off) or refresh existing tokens.
+ */
+function sync_pages(string $userToken): array {
+    $up = db()->prepare("INSERT INTO pages (id, name, token, active, picture, updated_at) VALUES (?, ?, ?, 0, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, token = excluded.token, picture = excluded.picture, updated_at = excluded.updated_at");
+    $seen = [];
+    $walk = function (string $edge, array $params) use ($userToken, $up, &$seen) {
+        $after = null; $guard = 0;
+        do {
+            $p = $params + ['limit' => 100];
+            if ($after) $p['after'] = $after;
+            $res = graph('GET', $edge, $p, $userToken);
+            if (gerr($res)) return $res;
+            foreach ($res['data'] ?? [] as $pg) {
+                $id = (string)($pg['id'] ?? '');
+                if ($id === '' || empty($pg['access_token']) || isset($seen[$id])) continue;
+                $seen[$id] = true;
+                $up->execute([$id, $pg['name'] ?? '', $pg['access_token'], $pg['picture']['data']['url'] ?? '', now()]);
+            }
+            $after = $res['paging']['cursors']['after'] ?? null;
+        } while (isset($res['paging']['next']) && $after && ++$guard < 20);
+        return null;
+    };
+    $f = ['fields' => 'id,name,access_token,picture{url}'];
+    if ($err = $walk('me/accounts', $f)) return ['error' => gerr($err)];
+    // Business portfolio pages (optional — ignore errors if business_management isn't granted)
+    $biz = graph('GET', 'me/businesses', ['fields' => 'id', 'limit' => 50], $userToken);
+    if (!gerr($biz)) foreach ($biz['data'] ?? [] as $b) {
+        $walk($b['id'] . '/owned_pages', $f);
+        $walk($b['id'] . '/client_pages', $f);
+    }
+    return ['count' => count($seen)];
 }
 
 /**

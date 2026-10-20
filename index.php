@@ -276,6 +276,11 @@ if ($a) {
             else { set_setting('admin_hash', password_hash($pw, PASSWORD_DEFAULT)); flash('اتغير الباسورد ✅'); }
             redirect('?p=settings');
 
+        case 'sync_pages':
+            refresh_page_tokens(true);
+            $n = (int)fetch_col(db()->query('SELECT COUNT(*) FROM pages'));
+            flash(setting('token_problem') ? 'صلاحية الربط انتهت — دوس "تحديث / إضافة صفحات" واربط تاني' : "تم تحديث القايمة — عندك $n صفحة", setting('token_problem') ? 'err' : 'ok');
+            redirect('?');
         case 'import_token':
             $tok = trim((string)($_POST['token'] ?? ''));
             if (preg_match('/^\d{6,25}$/', $tok)) {
@@ -535,7 +540,7 @@ case 'page':
     $back = '?p=page&id=' . urlencode($pg['id']);
     top($pg['name']); ?>
     <div class="row" style="justify-content:space-between;margin-bottom:14px">
-      <div class="pg"><img src="<?= h($pg['picture']) ?>" alt=""><div><h1 style="margin:0"><?= h($pg['name']) ?></h1>
+      <div class="pg"><img src="<?= h(page_pic($pg)) ?>" alt="" onerror="this.style.visibility='hidden'"><div><h1 style="margin:0"><?= h($pg['name']) ?></h1>
         <?= (int)$pg['active'] === 1 ? '<span class="badge ok">الرد التلقائي شغال</span>' : '<span class="badge off">الرد التلقائي واقف</span>' ?></div></div>
       <div class="row">
         <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="page_toggle"><input type="hidden" name="id" value="<?= h($pg['id']) ?>"><input type="hidden" name="back" value="<?= h($back) ?>">
@@ -855,11 +860,13 @@ default:
         <div style="margin-top:10px"><button class="btn sec">ربط</button></div></form>
     </details>
 
+    <form method="post" style="margin:0 0 12px"><?= csrf_field() ?><input type="hidden" name="a" value="sync_pages"><button class="btn sec sm">🔄 هات الصفحات الجديدة</button>
+      <span class="muted">لو صفحة جديدة لسه مش ظاهرة بعدها، دوس "تحديث / إضافة صفحات" وفي شاشة فيسبوك اختار "تعديل الإعدادات" وعلّم الصفحة الجديدة.</span></form>
     <?php if (!$hasPages): ?><div class="card"><p class="muted">مفيش صفحات متربطة لسه.</p></div><?php endif; ?>
     <div class="grid">
     <?php foreach ($pages as $pg): ?>
       <div class="card" style="margin:0">
-        <div class="pg"><img src="<?= h($pg['picture']) ?>" alt="" loading="lazy"><div style="min-width:0">
+        <div class="pg"><img src="<?= h(page_pic($pg)) ?>" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div style="min-width:0">
           <strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= h($pg['name']) ?></strong>
           <?= (int)$pg['active'] === 1 ? '<span class="badge ok">شغال</span>' : '<span class="badge off">واقف</span>' ?> <span class="muted"><?= (int)$pg['rc'] ?> قاعدة</span></div></div>
         <div class="row" style="margin-top:12px">
