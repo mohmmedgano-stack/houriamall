@@ -8,15 +8,15 @@
 </head>
 <body>
 <h1>سياسة الخصوصية</h1>
-<p>هذه الأداة تُستخدم من قِبل مالك الموقع <?= $host ?> للرد التلقائي على تعليقات صفحات فيسبوك التي يديرها، وإرسال رسالة خاصة واحدة لصاحب التعليق.</p>
+<p>هذه الأداة تُستخدم من قِبل مالك الموقع <?= $host ?> للرد التلقائي على تعليقات صفحات فيسبوك وحسابات تيك توك التي يديرها، وإرسال رسالة خاصة واحدة لصاحب التعليق على فيسبوك.</p>
 <h2>البيانات التي نستخدمها</h2>
-<p>نستقبل من فيسبوك نص التعليق واسم صاحبه ومعرّف التعليق فقط، ونستخدمها لإرسال الرد ولحفظ سجل داخلي يمنع تكرار الرد. لا نبيع أو نشارك أي بيانات مع أي طرف ثالث.</p>
+<p>نستقبل من فيسبوك وتيك توك نص التعليق واسم صاحبه ومعرّف التعليق فقط، ونستخدمها لإرسال الرد ولحفظ سجل داخلي يمنع تكرار الرد. لا نبيع أو نشارك أي بيانات مع أي طرف ثالث.</p>
 <h2>حذف البيانات</h2>
 <p>يمكنك طلب حذف أي بيانات تخصك بمراسلة الصفحة التي علّقت عليها، وسيتم حذفها خلال 30 يومًا.</p>
 <div class="en">
 <h1>Privacy Policy</h1>
-<p>This tool is operated by the owner of <?= $host ?> to automatically reply to comments on Facebook Pages they manage and to send one private reply to the commenter.</p>
-<p>We only receive the comment text, commenter name and comment ID from Facebook, used solely to send the reply and keep an internal log preventing duplicate replies. No data is sold or shared with third parties.</p>
+<p>This tool is operated by the owner of <?= $host ?> to automatically reply to comments on Facebook Pages and TikTok accounts they manage, and to send one private reply to the commenter on Facebook.</p>
+<p>We only receive the comment text, commenter name and comment ID from Facebook and TikTok, used solely to send the reply and keep an internal log preventing duplicate replies. No data is sold or shared with third parties.</p>
 <p>To request deletion of your data, message the Page you commented on; it will be deleted within 30 days.</p>
 </div>
 </body>

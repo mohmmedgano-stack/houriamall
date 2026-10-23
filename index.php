@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
+require __DIR__ . '/tt_lib.php';
+require __DIR__ . '/tt_ui.php';
 start_session();
 
 $a = $_POST['a'] ?? null;
@@ -74,6 +76,7 @@ details summary{cursor:pointer;font-weight:600;color:var(--acc)}
 <header><div class="hwrap"><div class="brand">🤖 Gano <span>Auto Reply</span></div>
 <?php if ($nav): ?><nav>
 <a href="?" class="<?= in_array($cur, ['home', 'page', 'rule', 'backfill'], true) ? 'on' : '' ?>">الصفحات</a>
+<a href="?p=tt" class="<?= in_array($cur, ['tt', 'tt_acc', 'tt_rule'], true) ? 'on' : '' ?>">🎵 تيك توك</a>
 <a href="?p=blocks" class="<?= $cur === 'blocks' ? 'on' : '' ?>">المحظور</a>
 <a href="?p=logs" class="<?= $cur === 'logs' ? 'on' : '' ?>">السجل</a>
 <a href="?p=settings" class="<?= $cur === 'settings' ? 'on' : '' ?>">الإعدادات</a>
@@ -245,6 +248,7 @@ if (in_array($a, ['job_start', 'job_pause', 'job_status'], true)) {
 }
 
 /* ================= Actions ================= */
+if ($a && strncmp($a, 'tt_', 3) === 0) { check_csrf(); tt_handle_action($a); }
 if ($a) {
     check_csrf();
     switch ($a) {
@@ -394,6 +398,8 @@ if ($a) {
 $appReady = setting('app_id') && setting('app_secret');
 $webhookOk = (bool)setting('webhook_ok');
 $pages = db()->query('SELECT p.*, (SELECT COUNT(*) FROM rules r WHERE r.page_id = p.id) AS rc FROM pages p ORDER BY active DESC, name')->fetchAll();
+
+if (in_array($p, ['tt', 'tt_acc', 'tt_rule'], true)) { tt_render($p); exit; }
 
 switch ($p) {
 

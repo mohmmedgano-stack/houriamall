@@ -6,6 +6,7 @@
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require __DIR__ . '/lib.php';
+require __DIR__ . '/tt_lib.php';
 
 $lock = fopen(DATA_DIR . '/worker.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) exit;   // previous run still going
@@ -21,6 +22,7 @@ if (setting('last_prune', '') !== gmdate('Y-m-d')) {
     $safe(function () {
         db()->exec("DELETE FROM log WHERE created_at < datetime('now', '-120 days')");
         db()->exec("DELETE FROM jobs WHERE status = 'done' AND updated_at < datetime('now', '-30 days')");
+        tt_db()->exec("DELETE FROM tt_log WHERE created_at < datetime('now', '-120 days')");
         set_setting('last_prune', gmdate('Y-m-d'));
     }, 'prune');
 }
@@ -67,6 +69,7 @@ $deadline = time() + 50;
 $safe(fn() => refresh_page_tokens(), 'pages');   // every 10 min: new pages + fresh tokens
 $safe(fn() => check_waiting_rules(), 'waiting');
 $safe(fn() => retry_due(10), 'retry');
+$safe(fn() => tt_run(time() + 30), 'tiktok');   // TikTok: new comments every minute
 
 if (time() - (int)setting('last_sweep', '0') >= 600) {
     set_setting('last_sweep', (string)time());
