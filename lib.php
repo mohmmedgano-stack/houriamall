@@ -293,7 +293,7 @@ function retry_delay(array $r, int $attempt = 1): ?int {
 /** Re-fetch every page token with the saved long-lived user token (self-heal for expired page tokens). */
 function refresh_page_tokens(bool $force = false): void {
     $last = (int)setting('tokens_refreshed', '0');
-    if (!$force && time() - $last < 1800) return;
+    if (!$force && time() - $last < 600) return;
     set_setting('tokens_refreshed', (string)time());
     $user = setting('user_token');
     if (!$user) return;

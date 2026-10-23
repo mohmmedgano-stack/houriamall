@@ -64,7 +64,7 @@ if (setting('retry_expired', '') !== '1') {
 
 $deadline = time() + 50;
 
-$safe(fn() => refresh_page_tokens(), 'pages');   // every 30 min: new pages + fresh tokens
+$safe(fn() => refresh_page_tokens(), 'pages');   // every 10 min: new pages + fresh tokens
 $safe(fn() => check_waiting_rules(), 'waiting');
 $safe(fn() => retry_due(10), 'retry');
 
