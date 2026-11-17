@@ -352,7 +352,7 @@ if ($a) {
                 db()->prepare('INSERT INTO rules (post_id, post_label, name, active, match_mode, keywords, send_comment, comment_replies, send_dm, dm_messages, fallback_replies, mention_user, images, images_button, like_comment, wait_next, wait_text, page_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute(array_merge($vals, [$pageId, now()]));
             }
-            if ($wn && $id) db_run('UPDATE rules SET created_at = ? WHERE id = ?', [now(), $id]);
+            if ($wn && $id && $wt === '') db_run('UPDATE rules SET created_at = ? WHERE id = ?', [now(), $id]);   // "next post" without a phrase: wait for the next one from now
             flash(($wn ? 'اتحفظت ✅ القاعدة هتشتغل لوحدها أول ما الصفحة تنزّل البوست الجاي (حتى لو مجدول)' : 'اتحفظت القاعدة ✅') . ((int)$pg['active'] !== 1 ? ' — متنساش تفعّل الصفحة' : ''));
             redirect('?p=page&id=' . urlencode($pageId));
 
@@ -565,6 +565,7 @@ case 'page':
               <?= (int)$r['active'] === 1 ? '<span class="badge ok">شغالة</span>' : '<span class="badge off">واقفة</span>' ?></div>
             <div class="row">
               <a class="btn sec sm" href="?p=rule&page=<?= urlencode($pg['id']) ?>&id=<?= (int)$r['id'] ?>">تعديل</a>
+              <a class="btn sec sm" href="?p=rule&page=<?= urlencode($pg['id']) ?>&copy=<?= (int)$r['id'] ?>" title="قاعدة جديدة بنفس الردود — غيّر بس الكلمة والسعر">📄 نسخ</a>
               <form method="post"><?= csrf_field() ?><input type="hidden" name="a" value="rule_toggle"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="back" value="<?= h($back) ?>"><button class="btn sec sm"><?= (int)$r['active'] === 1 ? 'إيقاف' : 'تشغيل' ?></button></form>
               <?php if ($r['post_id']): ?>
               <a class="btn sec sm" href="?p=backfill&id=<?= (int)$r['id'] ?>">رد على القديم</a>
@@ -673,6 +674,14 @@ case 'rule':
     $id = (int)($_GET['id'] ?? 0);
     $r = ['id' => 0, 'name' => '', 'post_id' => '', 'post_label' => '', 'active' => 1, 'match_mode' => 'all', 'keywords' => '', 'send_comment' => 1, 'comment_replies' => '', 'send_dm' => 1, 'dm_messages' => '', 'fallback_replies' => '', 'mention_user' => 0, 'images' => '[]', 'images_button' => '', 'like_comment' => 0, 'wait_next' => 0, 'wait_text' => ''];
     if ($id) { $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$id, $pg['id']]); $r = fetch_one($st) ?: $r; }
+    $copyOf = (int)($_GET['copy'] ?? 0);
+    if (!$id && $copyOf) {   // start a new rule from a copy of an existing one — handy for many scheduled posts
+        $st = db()->prepare('SELECT * FROM rules WHERE id = ? AND page_id = ?'); $st->execute([$copyOf, $pg['id']]);
+        if ($src = fetch_one($st)) {
+            $r = array_merge($src, ['id' => 0, 'name' => '', 'active' => 1]);
+            if ((int)$src['wait_next'] === 1 || strpos((string)$src['post_label'], '⏰') === 0) { $r['post_id'] = ''; $r['post_label'] = ''; $r['wait_next'] = 1; $r['wait_text'] = ''; }
+        }
+    }
     $draft = $_SESSION['rule_draft'] ?? null; unset($_SESSION['rule_draft']);
     if ($draft) {
         foreach (['name', 'match_mode', 'keywords', 'comment_replies', 'dm_messages', 'post_label', 'fallback_replies', 'images_button', 'wait_text'] as $k) $r[$k] = $draft[$k] ?? $r[$k];
@@ -719,7 +728,7 @@ case 'rule':
         <div id="waitbox" style="margin:0 0 10px">
           <label class="f">كلمة أو جملة من كلام البوست المجدول</label>
           <input type="text" name="wait_text" value="<?= h($r['wait_text'] ?? '') ?>" placeholder="مثلاً: عصارة فواكه">
-          <p class="muted">انسخ جزء مميز من كلام البوست المجدول (زي اسم المنتج)، والقاعدة هتتربط بالبوست اللي فيه الكلام ده بالظبط لما ينزل — كده تقدر تجدول 20 بوست وتعمل لكل واحد قاعدته. لو سبتها فاضية، هتتربط بأول بوست ينزل على الصفحة.</p>
+          <p class="muted">انسخ جزء مميز من كلام البوست المجدول (زي اسم المنتج)، والقاعدة هتتربط بالبوست اللي فيه الكلام ده بالظبط لما ينزل — كده تقدر تجدول أي عدد بوستات (100 وأكتر) وتعمل لكل واحد قاعدته — مش لازم تنسخ الإيموجي، الأداة بتقارن الحروف والأرقام بس. لو سبتها فاضية، هتتربط بأول بوست ينزل على الصفحة.</p>
         </div>
         <div id="postbox">
           <label class="f">اختار البوست</label>

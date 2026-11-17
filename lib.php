@@ -724,14 +724,19 @@ function bind_next_rules(string $pageId, string $postId, ?int $postTs = null, st
     $st = db()->prepare("SELECT id, created_at, wait_text FROM rules WHERE page_id = ? AND COALESCE(wait_next, 0) = 1 AND (post_id = '' OR post_id IS NULL)");
     $st->execute([$pageId]);
     $n = 0;
-    $normText = norm_ar($postText !== '' ? $postText : $label);
+    $text = $postText !== '' ? $postText : $label;
     foreach ($st->fetchAll() as $r) {
         if ($postTs && $postTs < strtotime($r['created_at'] . ' UTC') - 120) continue;   // post is older than the rule
         $need = trim((string)($r['wait_text'] ?? ''));
-        if ($need !== '' && mb_strpos(preg_replace('/\s+/u', ' ', $normText), preg_replace('/\s+/u', ' ', norm_ar($need))) === false) continue;   // not the post this rule waits for
+        if ($need !== '' && !text_has_phrase($text, $need)) continue;   // not the post this rule waits for (emojis, spaces and punctuation ignored)
         $lbl = '⏰ ' . ($label !== '' ? $label : 'البوست اللي نزل') . ' · ' . gmdate('Y-m-d', $postTs ?: time());
-        db_run("UPDATE rules SET post_id = ?, post_label = ?, wait_next = 0 WHERE id = ? AND (post_id = '' OR post_id IS NULL)", [$postId, $lbl, (int)$r['id']]);
+        $up = db_run("UPDATE rules SET post_id = ?, post_label = ?, wait_next = 0 WHERE id = ? AND (post_id = '' OR post_id IS NULL)", [$postId, $lbl, (int)$r['id']]);
+        if ($up->rowCount() === 0) continue;
         $n++;
+        // caught the post late (it went live a while ago) → also answer the comments it already got, in the background
+        if ($postTs && time() - $postTs > 600) {
+            db_run("INSERT INTO jobs (rule_id, status, created_at, updated_at) VALUES (?, 'running', ?, ?)", [(int)$r['id'], now(), now()]);
+        }
     }
     return $n;
 }
@@ -740,12 +745,24 @@ function bind_next_rules(string $pageId, string $postId, ?int $postTs = null, st
 function check_waiting_rules(): void {
     $pages = db()->query("SELECT DISTINCT p.* FROM pages p JOIN rules r ON r.page_id = p.id WHERE COALESCE(r.wait_next, 0) = 1 AND (r.post_id = '' OR r.post_id IS NULL)")->fetchAll();
     foreach ($pages as $pg) {
-        $res = graph('GET', $pg['id'] . '/posts', ['fields' => 'id,message,created_time', 'limit' => 15], $pg['token']);
-        if (gerr($res)) continue;
         $st = db()->prepare("SELECT MIN(created_at) FROM rules WHERE page_id = ? AND COALESCE(wait_next, 0) = 1 AND (post_id = '' OR post_id IS NULL)");
         $st->execute([$pg['id']]);
-        $since = strtotime((string)fetch_col($st) . ' UTC') - 120;
-        $fresh = array_filter($res['data'] ?? [], fn($p) => isset($p['created_time']) && strtotime($p['created_time']) >= $since);
+        $since = max(strtotime((string)fetch_col($st) . ' UTC') - 120, time() - 45 * 86400);
+        // every post that went live since the oldest waiting rule (paged — there can be many scheduled posts a day)
+        $fresh = []; $after = null; $guard = 0;
+        do {
+            $q = ['fields' => 'id,message,created_time', 'limit' => 25];
+            if ($after) $q['after'] = $after;
+            $res = graph('GET', $pg['id'] . '/published_posts', $q, $pg['token']);
+            if (gerr($res)) break;
+            $older = false;
+            foreach ($res['data'] ?? [] as $p) {
+                if (!isset($p['created_time'])) continue;
+                if (strtotime($p['created_time']) < $since) { $older = true; break; }
+                $fresh[] = $p;
+            }
+            $after = $res['paging']['cursors']['after'] ?? null;
+        } while (!$older && $after && isset($res['paging']['next']) && ++$guard < 8);
         if (!$fresh) continue;
         usort($fresh, fn($a, $b) => strcmp($a['created_time'], $b['created_time']));   // oldest first: each rule gets the first post that fits it
         foreach ($fresh as $p) {
