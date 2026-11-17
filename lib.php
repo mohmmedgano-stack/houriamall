@@ -240,6 +240,17 @@ function norm_ar(string $s): string {
     return strtr($s, ['أ' => 'ا', 'إ' => 'ا', 'آ' => 'ا', 'ٱ' => 'ا', 'ة' => 'ه', 'ى' => 'ي', 'ؤ' => 'و', 'ئ' => 'ي']);
 }
 
+/** Text reduced to letters and digits only (no emojis, punctuation or spaces) — for "post contains this phrase" checks. */
+function match_key(string $s): string {
+    $s = to_latin_digits(norm_ar($s));
+    return preg_replace('/[^\p{L}\p{N}]+/u', '', $s) ?? $s;
+}
+
+function text_has_phrase(string $text, string $phrase): bool {
+    $k = match_key($phrase);
+    return $k !== '' && mb_strpos(match_key($text), $k) !== false;
+}
+
 function personalize(string $text, string $fullName): string {
     $fullName = trim($fullName);
     $first = $fullName !== '' ? explode(' ', $fullName)[0] : '';
